@@ -2,6 +2,31 @@
 let DB = { users: [], binomes: [], resources: [], messages: [], notifications: [] };
 let SESSION = null;
 
+/* ---------- état de l'interface (inscription / messagerie) ---------- */
+let regStep = 0;
+let regData = { interests: [], activities: [] };
+let currentChatWith = null;
+
+/* ---------- constantes ---------- */
+const CREDIT_HTML = 'AgroMentor — plateforme pédagogique';
+const INTERESTS = ['Agriculture durable','Nutrition','Agroalimentaire','Recherche','Innovation','Économie agricole'];
+const ACTIVITIES = ['Sport','Études de terrain','Clubs étudiants','Projet associatif','Bénévolat','Recherche'];
+
+/* ---------- notifications visuelles (toast) ---------- */
+function toast(message, title){
+  const wrap = document.getElementById('toast-wrap');
+  if(!wrap) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = (title ? '<div><b>'+title+'</b><br>'+message+'</div>' : '<div>'+message+'</div>');
+  wrap.appendChild(el);
+  setTimeout(function(){
+    el.style.transition='opacity .3s';
+    el.style.opacity='0';
+    setTimeout(function(){ el.remove(); },300);
+  }, 3200);
+}
+
 /* ---------- Amélioration de saveDB dans script.js ---------- */
 async function saveDB(key) {
   if (!DB[key]) return;
@@ -975,7 +1000,7 @@ async function syncOnlineData() {
   }
 }
 
-// Optionnel : Lancer automatiquement une vérification toutes les 30 secondes
+// Optionnel : Lancer automatiquement une vérification toutes les 15 secondes
 setInterval(() => {
   if (SESSION) { // Seulement si quelqu'un (comme l'admin) est connecté
     loadDB().then(() => { if (typeof renderApp === 'function') renderApp(); });
