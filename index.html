@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroMentor — Parrainage &amp; mentorat STAAN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="toast-wrap"></div>
+
+<div id="app">
+
+<!-- ============= PUBLIC SITE ============= -->
+<div class="view active" id="view-site">
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo"><div class="logo-mark">🌱</div>AgroMentor</div>
+      <div class="nav-links">
+        <a href="#hero">Accueil</a>
+        <a href="#about">À propos</a>
+        <a href="#how">Comment ça fonctionne</a>
+        <a href="#sponsors">Parrains</a>
+        <a href="#sponsees">Filleuls</a>
+        <a href="#resources">Ressources</a>
+        <a href="#faq">FAQ</a>
+        <a href="#contact">Contact</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openAdminLogin()" title="Accès réservé à l'administrateur">🔐 Espace Admin</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAuth('login')">Se connecter</button>
+        <button class="btn btn-primary btn-sm" onclick="openAuth('register')">S'inscrire</button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero" id="hero">
+    <div class="container hero-grid">
+      <div>
+        <span class="eyebrow">Département STAAN</span>
+        <h1>Ensemble pour réussir.<br><span class="rotator" id="rotator">Un étudiant expérimenté, un étudiant accompagné.</span></h1>
+        <p class="lead">Construisons votre réussite académique et professionnelle grâce à une mise en relation intelligente entre parrains et filleuls du département Sciences et Techniques Agro-Alimentaires et Nutritionnelles.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary" onclick="openAuth('register')">Trouver un parrain</button>
+          <button class="btn btn-outline" onclick="openAuth('register')">Devenir parrain</button>
+        </div>
+      </div>
+      <div class="hero-art">
+        <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1000&auto=format&fit=crop" alt="Étudiants travaillant ensemble">
+        <div class="hero-badge">
+          <div style="font-size:26px;">🤝</div>
+          <div><b id="statBinomes">0</b><span>binômes déjà accompagnés</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="about" class="alt">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">À propos</span>
+        <h2>Une communauté d'entraide agro-alimentaire</h2>
+        <p>AgroMentor connecte les étudiants avancés du STAAN aux nouveaux arrivants, pour partager expérience, méthode de travail et repères universitaires — des cultures aux laboratoires, jusqu'aux stages de terrain.</p>
+      </div>
+      <div class="grid-3">
+        <div class="card"><span class="num">01</span><h4>Vécu partagé</h4><p>Des parrains qui ont traversé les mêmes cours, les mêmes travaux pratiques et les mêmes stages agricoles.</p></div>
+        <div class="card"><span class="num">02</span><h4>Compatibilité intelligente</h4><p>Un algorithme croise centres d'intérêt, disponibilités et objectifs avant toute proposition de binôme.</p></div>
+        <div class="card"><span class="num">03</span><h4>Suivi encadré</h4><p>Chaque binôme est validé par l'administration avant d'être activé, pour garantir un accompagnement sérieux.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Fonctionnement</span>
+        <h2>Quatre étapes vers un binôme validé</h2>
+        <p>Le système propose, mais c'est toujours l'administrateur qui confirme l'association définitive entre un parrain et un filleul.</p>
+      </div>
+      <div class="steps-wrap">
+        <div class="rings" id="ringsSvg"></div>
+        <div class="steps-list" id="stepsList">
+          <div class="step-item active" data-i="0"><div class="step-ring">01</div><div><h4>Création du compte</h4><p>L'étudiant crée son compte avec ses informations personnelles et académiques.</p></div></div>
+          <div class="step-item" data-i="1"><div class="step-ring">02</div><div><h4>Remplissage du profil</h4><p>Centres d'intérêt, compétences, objectifs, disponibilités et personnalité sont renseignés.</p></div></div>
+          <div class="step-item" data-i="2"><div class="step-ring">03</div><div><h4>Mise en relation automatique</h4><p>Un algorithme de compatibilité propose un binôme parrain / filleul.</p></div></div>
+          <div class="step-item" data-i="3"><div class="step-ring">04</div><div><h4>Validation par l'administrateur</h4><p>Le binôme n'est activé qu'après acceptation, modification ou création manuelle par l'administrateur.</p></div></div>
+        </div>
+      </div>
+      <div class="warn-box">⚠️ <div>Même proposé automatiquement, un binôme ne devient officiel qu'après validation de l'administrateur, qui peut aussi le refuser, le modifier ou en créer un manuellement.</div></div>
+    </div>
+  </section>
+
+  <section id="sponsors" class="alt">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Parrains</span>
+        <h2>Des étudiants expérimentés du STAAN</h2>
+        <p>Ils accompagnent, orientent et partagent leurs ressources avec les nouveaux étudiants.</p>
+      </div>
+      <div class="grid-3" id="sponsorShowcase"></div>
+    </div>
+  </section>
+
+  <section id="sponsees">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Filleuls</span>
+        <h2>Des nouveaux étudiants accompagnés</h2>
+        <p>Ils progressent avec le soutien d'un parrain validé par l'administration.</p>
+      </div>
+      <div class="grid-3" id="sponseeShowcase"></div>
+    </div>
+  </section>
+
+  <section id="resources" class="alt">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Ressources</span>
+        <h2>Cours, documents et vidéos partagés</h2>
+        <p>PDF, Word, PowerPoint, liens, images et vidéos pédagogiques — aimés, commentés, téléchargés et repartagés par la communauté.</p>
+      </div>
+      <div class="grid-3">
+        <div class="card"><span class="num">📄</span><h4>Documents de cours</h4><p>Fiches de TP, polycopiés et supports de nutrition et d'agronomie.</p></div>
+        <div class="card"><span class="num">🎬</span><h4>Vidéos pédagogiques</h4><p>Démonstrations de laboratoire et retours d'expérience de stage.</p></div>
+        <div class="card"><span class="num">🔗</span><h4>Liens utiles</h4><p>Ressources externes sélectionnées par les parrains.</p></div>
+      </div>
+      <div style="margin-top:26px;text-align:center;">
+        <button class="btn btn-outline" onclick="openAuth('login')">Accéder à l'espace ressources</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">FAQ</span>
+        <h2>Questions fréquentes</h2>
+      </div>
+      <div id="faqList"></div>
+    </div>
+  </section>
+
+  <section id="contact" class="alt">
+    <div class="container contact-wrap">
+      <div class="contact-info">
+        <span class="eyebrow">Contact</span>
+        <h2 style="color:var(--forest);margin:8px 0 20px;">Parlons-en</h2>
+        <div class="card"><h4>📍 Département STAAN</h4><p>Faculté des Sciences et Techniques, Sénégal</p></div>
+        <div class="card"><h4>💬 Nous écrire</h4><p>Utilisez le formulaire ci-contre : l'administration du département vous répondra dès que possible.</p></div>
+      </div>
+      <div class="card">
+        <form onsubmit="return submitContact(event)">
+          <div class="field"><label>Nom complet</label><input required id="cName"></div>
+          <div class="field"><label>Email</label><input type="email" required id="cEmail"></div>
+          <div class="field"><label>Message</label><textarea rows="5" required id="cMsg"></textarea></div>
+          <button class="btn btn-primary btn-block" type="submit">Envoyer le message</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <div id="footer-public"></div>
+</div>
+
+<!-- ============= APP (dashboard / admin) ============= -->
+<div class="view" id="view-app">
+  <div class="app-shell">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-area">
+      <div class="topbar">
+        <div style="font-weight:600;color:var(--forest);" id="topbarTitle">Tableau de bord</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-outline btn-sm" onclick="syncOnlineData()">🔄 Actualiser les données</button>
+          <button class="btn btn-ghost btn-sm" onclick="shareSite()">🔗 Partager AgroMentor</button>
+          <button class="btn btn-outline btn-sm" onclick="logout()">Déconnexion</button>
+        </div>
+      </div>
+      <div class="content" id="appContent"></div>
+      <div id="footer-app"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /#app -->
+
+<!-- ============= AUTH MODAL ============= -->
+<div class="overlay" id="authOverlay">
+  <div class="modal" id="authModal"></div>
+</div>
+
+<script type="module">
+  // 1. Importations officielles Firebase depuis le CDN
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+
+  // 2. Vos identifiants de projet exacts
+  const firebaseConfig = {
+    apiKey: "AIzaSyBkox5PdBjhbdQCkHCuRU2K-Hc_nIrfQVg",
+    authDomain: "agromentor-1fd49.firebaseapp.com",
+    projectId: "agromentor-1fd49",
+    storageBucket: "agromentor-1fd49.firebasestorage.app",
+    messagingSenderId: "306686983284",
+    appId: "1:306686983284:web:5517841775500efcaaa521",
+    measurementId: "G-6B2NNB3N6D"
+  };
+
+  // 3. Initialisation globale de Firebase et Firestore
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Exposer les outils Firebase à l'objet global window pour storage-shim.js
+  window.firestoreDb = db;
+  window.firestoreUtils = { doc, setDoc, getDoc, deleteDoc };
+
+  // 4. Chargement ordonné et asynchrone des fichiers JavaScript de votre application
+  const loadScript = (src) => {
+    return new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      document.body.appendChild(s);
+    });
+  };
+
+  async function startApp() {
+    await loadScript('storage-shim.js');
+    await loadScript('script.js');
+    console.log("🔥 AgroMentor Cloud Connecté et Initialisé !");
+  }
+
+  startApp();
+</script>
+</body>
+</html>
