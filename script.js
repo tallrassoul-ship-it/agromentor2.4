@@ -1,3 +1,7 @@
+/* ---------- base de données locale (mise en cache du Cloud) ---------- */
+let DB = { users: [], binomes: [], resources: [], messages: [], notifications: [] };
+let SESSION = null;
+
 /* ---------- Amélioration de saveDB dans script.js ---------- */
 async function saveDB(key) {
   if (!DB[key]) return;
