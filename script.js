@@ -1000,7 +1000,7 @@ async function syncOnlineData() {
   }
 }
 
-// Optionnel : Lancer automatiquement une vérification toutes les 15 secondes
+// Optionnel : Lancer automatiquement une vérification toutes les 30 secondes
 setInterval(() => {
   if (SESSION) { // Seulement si quelqu'un (comme l'admin) est connecté
     loadDB().then(() => { if (typeof renderApp === 'function') renderApp(); });
