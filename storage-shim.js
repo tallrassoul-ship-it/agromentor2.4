@@ -25,44 +25,19 @@
 
     async set(key, value) {
       const db = window.firestoreDb;
-      const { doc, setDoc, getDoc } = window.firestoreUtils;
+      const { doc, setDoc } = window.firestoreUtils;
       if (!db) return;
 
       try {
         const docRef = doc(db, "agromentor_data", key);
         const newData = JSON.parse(value);
 
-        // Si c'est une liste (utilisateurs, messages, binômes...), on fusionne pour éviter d'écraser
-        if (Array.isArray(newData)) {
-          const docSnap = await getDoc(docRef);
-          let currentData = [];
-          if (docSnap.exists() && Array.isArray(docSnap.data().payload)) {
-            currentData = docSnap.data().payload;
-          }
-
-          // Fusion intelligente : si un élément existe déjà (par email ou id), on le met à jour, sinon on l'ajoute
-          const merged = [...currentData];
-          newData.forEach(newItem => {
-            const index = merged.findIndex(item => {
-              if (item.email && newItem.email) return item.email === newItem.email;
-              if (item.id && newItem.id) return item.id === newItem.id;
-              return false;
-            });
-
-            if (index !== -1) {
-              merged[index] = newItem; // Mise à jour
-            } else {
-              merged.push(newItem); // Nouvel ajout
-            }
-          });
-
-          await setDoc(docRef, { payload: merged });
-          return { key, value: JSON.stringify(merged), shared: true };
-        } else {
-          // Pour les objets simples
-          await setDoc(docRef, { payload: newData });
-          return { key, value, shared: true };
-        }
+        // On écrit la liste telle qu'elle est fournie par script.js.
+        // (script.js gère déjà sa propre logique de fusion si besoin dans saveDB().
+        // Fusionner ici aussi empêchait toute suppression de refléter sur Firebase :
+        // un élément retiré localement était systématiquement remis en place.)
+        await setDoc(docRef, { payload: newData });
+        return { key, value, shared: true };
       } catch (error) {
         console.error("Erreur d'écriture Firebase:", error);
       }
