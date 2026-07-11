@@ -1,32 +1,3 @@
-/* ---------- base de données locale (mise en cache du Cloud) ---------- */
-let DB = { users: [], binomes: [], resources: [], messages: [], notifications: [] };
-let SESSION = null;
-
-/* ---------- état de l'interface (inscription / messagerie) ---------- */
-let regStep = 0;
-let regData = { interests: [], activities: [] };
-let currentChatWith = null;
-
-/* ---------- constantes ---------- */
-const CREDIT_HTML = 'AgroMentor — plateforme pédagogique';
-const INTERESTS = ['Agriculture durable','Nutrition','Agroalimentaire','Recherche','Innovation','Économie agricole'];
-const ACTIVITIES = ['Sport','Études de terrain','Clubs étudiants','Projet associatif','Bénévolat','Recherche'];
-
-/* ---------- notifications visuelles (toast) ---------- */
-function toast(message, title){
-  const wrap = document.getElementById('toast-wrap');
-  if(!wrap) return;
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = (title ? '<div><b>'+title+'</b><br>'+message+'</div>' : '<div>'+message+'</div>');
-  wrap.appendChild(el);
-  setTimeout(function(){
-    el.style.transition='opacity .3s';
-    el.style.opacity='0';
-    setTimeout(function(){ el.remove(); },300);
-  }, 3200);
-}
-
 /* ---------- Amélioration de saveDB dans script.js ---------- */
 async function saveDB(key) {
   if (!DB[key]) return;
@@ -234,6 +205,25 @@ async function shareResource(id){
 }
 
 /* ============================================================
+   NAV — mobile hamburger menu
+   ============================================================ */
+function toggleMobileNav(){
+  const nav = document.getElementById('navLinks');
+  if(nav) nav.classList.toggle('open');
+}
+function closeMobileNav(){
+  const nav = document.getElementById('navLinks');
+  if(nav) nav.classList.remove('open');
+}
+document.addEventListener('click', function(e){
+  const nav = document.getElementById('navLinks');
+  const btn = document.getElementById('hamburgerBtn');
+  if(!nav || !nav.classList.contains('open')) return;
+  if(nav.contains(e.target) || (btn && btn.contains(e.target))) return;
+  closeMobileNav();
+});
+
+/* ============================================================
    AUTH — login / register (multi-step)
    ============================================================ */
 function openAuth(mode){
@@ -307,7 +297,7 @@ function renderRegStep(){
           ${['Licence 1','Licence 2','Licence 3','Master 1','Master 2'].map(n=>`<option ${regData.niveau===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:16px;"><button class="btn btn-primary" onclick="regNext(0)">Continuer</button></div>`;
+      <div class="modal-actions"><button class="btn btn-primary" onclick="regNext(0)">Continuer</button></div>`;
   } else if(regStep===1){
     body.innerHTML = `
       <div class="field"><label>Je m'inscris en tant que</label>
@@ -319,7 +309,7 @@ function renderRegStep(){
         <div class="field"><label>Mot de passe</label><input type="password" id="rPass"></div>
         <div class="field"><label>Confirmation</label><input type="password" id="rPass2"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:16px;">
+      <div class="modal-actions">
         <button class="btn btn-ghost" onclick="regStep=0;renderRegStep()">Retour</button>
         <button class="btn btn-primary" onclick="regNext(1)">Continuer</button>
       </div>`;
@@ -345,7 +335,7 @@ function renderRegStep(){
           ${['Débutant','Intermédiaire','Avancé'].map(n=>`<option ${regData.exp===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:16px;">
+      <div class="modal-actions">
         <button class="btn btn-ghost" onclick="regStep=1;renderRegStep()">Retour</button>
         <button class="btn btn-primary" onclick="regNext(2)">Continuer</button>
       </div>`;
@@ -355,7 +345,7 @@ function renderRegStep(){
         Merci ${regData.prenom||''} ! Votre profil est prêt. Après validation de votre compte, un binôme compatible
         vous sera proposé automatiquement, puis <b>validé par l'administrateur</b> avant toute activation.
       </p>
-      <div style="display:flex;justify-content:space-between;margin-top:16px;">
+      <div class="modal-actions">
         <button class="btn btn-ghost" onclick="regStep=2;renderRegStep()">Retour</button>
         <button class="btn btn-primary" onclick="finishRegister()">Créer mon compte</button>
       </div>`;
