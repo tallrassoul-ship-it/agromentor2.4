@@ -59,20 +59,17 @@ async function loadDB(){
     }catch(e){ DB[key] = []; }
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
-  try{
-    const s = await window.storage.get('am_session', false);
-    if(s && s.value) SESSION = JSON.parse(s.value).email;
-  }catch(e){ SESSION = null; }
+  // On ne restaure PLUS la session automatiquement —
+  // l'utilisateur doit se reconnecter à chaque visite.
+  SESSION = null;
 }
 
 async function saveKey(key){
   try{ await saveDB(key); }catch(e){ toast("Erreur de sauvegarde des données."); }
 }
+// Session stockée uniquement en mémoire (perdue au rechargement)
 async function saveSession(){
-  try{
-    if(SESSION) await window.storage.set('am_session', JSON.stringify({email:SESSION}), false);
-    else await window.storage.delete('am_session', false);
-  }catch(e){}
+  // Aucune persistance — la session vit uniquement durant la page courante
 }
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
@@ -526,10 +523,12 @@ function enterApp(){
   goto(u.role==='admin'?'admin-overview':'dashboard');
 }
 async function logout(){
-  SESSION=null; await saveSession();
+  SESSION=null; 
+  currentChatWith=null;
   document.getElementById('view-app').classList.remove('active');
   document.getElementById('view-site').classList.add('active');
   window.scrollTo(0,0);
+  toast("Vous avez été déconnecté.","Déconnexion");
 }
 function renderSidebar(mode){
   const u=me();
@@ -1069,6 +1068,7 @@ setInterval(() => {
    ============================================================ */
 (async function init(){
   await loadDB();
+  // SESSION est toujours null au chargement → on reste sur la page publique
   const actifs = DB.binomes.filter(b=>b.status==='validé').length;
   const statBinomesEl = document.getElementById('statBinomes');
   const statBinomesBadgeEl = document.getElementById('statBinomesBadge');
@@ -1079,8 +1079,5 @@ setInterval(() => {
   if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
   if(statResourcesEl) animateCounter(statResourcesEl, DB.resources.length);
   renderShowcase();
-  if(SESSION && findUser(SESSION)){
-    enterApp();
-    handleDeepLink();
-  }
+  // Plus de redirection auto — l'utilisateur doit se connecter manuellement
 })();
