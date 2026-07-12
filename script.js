@@ -1,3 +1,16 @@
+/* ============================================================
+   ÉTAT GLOBAL DE L'APPLICATION (DÉCLARATIONS MANQUANTES — AJOUTÉES)
+   Ces variables étaient utilisées partout dans le fichier mais
+   n'étaient jamais déclarées, ce qui provoquait un
+   "ReferenceError: DB is not defined" dès le chargement de la
+   page et empêchait toute connexion, inscription ou accès admin.
+   ============================================================ */
+let DB = { users: [], binomes: [], resources: [], notifications: [], messages: [] };
+let SESSION = null;
+let regStep = 0;
+let regData = { interests: [], activities: [] };
+const CREDIT_HTML = ''; // ⚠️ remettez ici votre texte/lien de crédit d'origine si vous en aviez un
+
 /* ---------- Amélioration de saveDB dans script.js ---------- */
 // Identifiant stable d'un enregistrement (email pour users, id pour le reste).
 function recordId(x){ return (x && (x.email || x.id)) || null; }
