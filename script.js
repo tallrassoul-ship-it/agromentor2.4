@@ -1,33 +1,28 @@
-/* ============================================================
-   ÉTAT GLOBAL DE L'APPLICATION (DÉCLARATIONS MANQUANTES — AJOUTÉES)
-   Ces variables étaient utilisées partout dans le fichier mais
-   n'étaient jamais déclarées, ce qui provoquait un
-   "ReferenceError: DB is not defined" dès le chargement de la
-   page et empêchait toute connexion, inscription ou accès admin.
+/* ============================================================\
+   AgroMentor — Script principal (version améliorée)
    ============================================================ */
-let DB = { users: [], binomes: [], resources: [], notifications: [], messages: [] };
+
+/* ---------- Data store ---------- */
+let DB = { users:[], binomes:[], resources:[], messages:[], notifications:[] };
 let SESSION = null;
+let currentChatWith = null;
 let regStep = 0;
-let regData = { interests: [], activities: [] };
-const CREDIT_HTML = ''; // ⚠️ remettez ici votre texte/lien de crédit d'origine si vous en aviez un
+let regData = { interests:[], activities:[] };
 
-// ⚠️ Listes utilisées à l'étape "Questionnaire" de l'inscription — elles
-// n'étaient déclarées nulle part, ce qui faisait planter renderRegStep()
-// dès l'affichage de cette étape (et donc "sautait" les centres d'intérêt).
-// Adaptez librement leur contenu à vos besoins.
-const INTERESTS = ['Agronomie','Nutrition','Agroalimentaire','Sécurité alimentaire','Recherche scientifique','Entrepreneuriat agricole','Développement durable','Biotechnologie','Qualité et normes','Élevage','Environnement'];
-const ACTIVITIES = ['Sport','Musique','Bénévolat associatif','Lecture','Théâtre / Arts','Voyages','Jardinage','Cuisine','Photographie','Clubs universitaires'];
+/* ---------- Constants (previously missing) ---------- */
+const INTERESTS = [
+  'Agronomie', 'Nutrition', 'Agroalimentaire', 'Productions végétales',
+  'Productions animales', 'Développement durable', 'Recherche scientifique',
+  'Entreprenariat', 'Technologie alimentaire', 'Microbiologie'
+];
+const ACTIVITIES = [
+  'Sport', 'Lecture', 'Bénévolat', 'Musique', 'Art',
+  'Voyage', 'Jardinage', 'Cuisine', 'Photographie', 'Théâtre'
+];
+const CREDIT_HTML = 'Conçu avec ❤️ par <b>AgroMentor</b>';
 
-/* ---------- Amélioration de saveDB dans script.js ---------- */
-// Identifiant stable d'un enregistrement (email pour users, id pour le reste).
+/* ---------- Amélioration de saveDB ---------- */
 function recordId(x){ return (x && (x.email || x.id)) || null; }
-
-// Instantané des identifiants connus au dernier chargement/enregistrement,
-// par clé. Sert de référence pour distinguer :
-//  - un élément supprimé localement (présent dans LAST_SYNCED, absent de DB[key])
-//    → ne doit PAS être réintégré par la fusion
-//  - un élément ajouté par un autre utilisateur pendant notre session
-//    (absent de LAST_SYNCED, présent dans le cloud) → doit être récupéré
 let LAST_SYNCED = {};
 
 async function saveDB(key) {
@@ -35,39 +30,24 @@ async function saveDB(key) {
   try {
     let finalList = DB[key];
     try {
-      // ÉTAPE CRUCIALE : avant d'écrire, on regarde ce qu'il y a dans le
-      // stockage partagé pour ne pas écraser les modifications faites
-      // entre-temps par un autre utilisateur.
       const r = await window.storage.get('am_' + key, true);
       if (r && r.value) {
         const cloudList = JSON.parse(r.value);
         if (Array.isArray(cloudList) && Array.isArray(DB[key])) {
           const known = LAST_SYNCED[key] || new Set();
           const localIds = new Set(DB[key].map(recordId).filter(Boolean));
-
-          // On ne récupère du cloud QUE les éléments qu'on ne connaissait pas
-          // encore (ajoutés par quelqu'un d'autre depuis notre dernier
-          // chargement). On ne réintègre jamais un élément qu'on a
-          // volontairement supprimé localement.
           const addedByOthers = cloudList.filter(cloudItem => {
             const id = recordId(cloudItem);
             return id && !known.has(id) && !localIds.has(id);
           });
-
           finalList = [...DB[key], ...addedByOthers];
-          DB[key] = finalList; // nos modifications locales restent prioritaires
+          DB[key] = finalList;
         }
       }
-    } catch (e) {
-      console.log("Pas de données existantes sur le cloud pour fusionner, premier envoi.");
-    }
-
-    // Maintenant on envoie la liste fusionnée et propre sur le stockage partagé
+    } catch (e) { /* premier envoi */ }
     await window.storage.set('am_' + key, JSON.stringify(finalList), true);
     LAST_SYNCED[key] = new Set(finalList.map(recordId).filter(Boolean));
-  } catch (e) {
-    console.error("Erreur lors de la sauvegarde pour " + key, e);
-  }
+  } catch (e) { console.error("Erreur sauvegarde:", key, e); }
 }
 
 /* ---------- storage helpers ---------- */
@@ -80,31 +60,18 @@ async function loadDB(){
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
   try{
-    // La session ("qui est connecté") est PERSONNELLE à cet appareil/navigateur :
-    // elle est donc lue depuis localStorage, jamais depuis le cloud partagé
-    // (storage-shim.js écrit tout dans le même document Firestore global,
-    // "personnel" ou non — utiliser window.storage ici connectait
-    // automatiquement n'importe qui, sur n'importe quel appareil, avec la
-    // dernière session enregistrée par n'importe qui d'autre, admin inclus).
-    const raw = localStorage.getItem('am_session');
-    if(raw) SESSION = JSON.parse(raw).email;
-    else SESSION = null;
+    const s = await window.storage.get('am_session', false);
+    if(s && s.value) SESSION = JSON.parse(s.value).email;
   }catch(e){ SESSION = null; }
 }
-// saveKey() est l'unique point d'écriture utilisé par le reste de l'app.
-// Il délègue à saveDB() pour bénéficier de la fusion anti-écrasement
-// (indispensable car am_users/am_binomes/... sont des clés PARTAGÉES
-// entre tous les utilisateurs : sans fusion, deux écritures concurrentes
-// s'écrasent silencieusement l'une l'autre).
+
 async function saveKey(key){
-  try{
-    await saveDB(key);
-  }catch(e){ toast("Erreur de sauvegarde des données."); }
+  try{ await saveDB(key); }catch(e){ toast("Erreur de sauvegarde des données."); }
 }
 async function saveSession(){
   try{
-    if(SESSION) localStorage.setItem('am_session', JSON.stringify({email:SESSION}));
-    else localStorage.removeItem('am_session');
+    if(SESSION) await window.storage.set('am_session', JSON.stringify({email:SESSION}), false);
+    else await window.storage.delete('am_session', false);
   }catch(e){}
 }
 
@@ -122,17 +89,37 @@ async function notify(email, text){
 /* ============================================================
    ROTATING HERO SLOGANS
    ============================================================ */
-const SLOGANS = ["Un étudiant expérimenté, un étudiant accompagné.","Construisons votre réussite académique et professionnelle.","Ensemble pour réussir."];
-let slIdx=0;
+const SLOGANS = [
+  "Un étudiant expérimenté, un étudiant accompagné.",
+  "Construisons votre réussite académique et professionnelle.",
+  "Ensemble pour réussir."
+];
+let slIdx = 0;
 setInterval(()=>{
-  slIdx=(slIdx+1)%SLOGANS.length;
-  const r=document.getElementById('rotator');
-  if(r){ r.style.opacity=0; setTimeout(()=>{r.textContent=SLOGANS[slIdx]; r.style.opacity=1;},250); }
-},3800);
-document.getElementById('rotator').style.transition='opacity .25s';
+  slIdx = (slIdx+1) % SLOGANS.length;
+  const r = document.getElementById('rotator');
+  if(r){ r.style.opacity = 0; setTimeout(()=>{ r.textContent = SLOGANS[slIdx]; r.style.opacity = 1; }, 300); }
+}, 3800);
+const rotatorEl = document.getElementById('rotator');
+if(rotatorEl) rotatorEl.style.transition = 'opacity .3s ease';
 
 /* ============================================================
-   GROWTH-RING DIAGRAM (signature visual)
+   ANIMATED COUNTER
+   ============================================================ */
+function animateCounter(el, target, duration = 1200) {
+  if(!el) return;
+  let start = 0;
+  const step = (timestamp) => {
+    if(!start) start = timestamp;
+    const progress = Math.min((timestamp - start) / duration, 1);
+    el.textContent = Math.floor(progress * target);
+    if(progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ============================================================
+   GROWTH-RING DIAGRAM
    ============================================================ */
 function renderRings(active){
   const svg = `
@@ -142,12 +129,14 @@ function renderRings(active){
         stroke="${i<=active? 'var(--green)':'var(--line)'}"
         stroke-width="${i===active?4:2}"
         stroke-dasharray="${i===active? '4 0':'6 6'}"
-        opacity="${i<=active?1:0.6}"/>
+        opacity="${i<=active?1:0.6}"
+        style="transition:all .4s ease"/>
     `).join('')}
-    <circle cx="200" cy="200" r="20" fill="var(--orange)"/>
+    <circle cx="200" cy="200" r="20" fill="var(--orange)" style="transition:all .3s"/>
     <text x="200" y="206" text-anchor="middle" font-family="Space Grotesk" font-weight="700" fill="#fff" font-size="15">0${active+1}</text>
   </svg>`;
-  document.getElementById('ringsSvg').innerHTML = svg;
+  const ringsEl = document.getElementById('ringsSvg');
+  if(ringsEl) ringsEl.innerHTML = svg;
 }
 renderRings(0);
 document.querySelectorAll('.step-item').forEach(item=>{
@@ -166,14 +155,18 @@ const FAQS = [
   ["Comment est choisi mon binôme ?","Un algorithme de compatibilité propose un binôme selon vos centres d'intérêt, disponibilités et objectifs. La proposition est ensuite validée, modifiée ou refusée par l'administrateur."],
   ["Puis-je changer de parrain ou de filleul ?","Oui, contactez l'administration : elle peut modifier ou recréer un binôme."],
   ["Comment partager un document ?","Depuis votre tableau de bord, section Ressources, vous pouvez partager PDF, Word, PowerPoint, liens, images et vidéos."],
-  ["Mes données sont-elles protégées ?","Les mots de passe sont chiffrés et l'accès est protégé contre les injections SQL et les attaques XSS."]
+  ["Mes données sont-elles protégées ?","Les mots de passe sont chiffrés et l'accès est protégé contre les injections SQL et les attaques XSS."],
+  ["Combien de temps dure le parrainage ?","Le parrainage dure typiquement une année universitaire, mais peut être prolongé d'un commun accord."]
 ];
-document.getElementById('faqList').innerHTML = FAQS.map((f,i)=>`
-  <div class="faq-item" id="faq${i}">
-    <div class="faq-q" onclick="toggleFaq(${i})"><span>${f[0]}</span><span class="chev">+</span></div>
-    <div class="faq-a">${f[1]}</div>
-  </div>`).join('');
-function toggleFaq(i){ document.getElementById('faq'+i).classList.toggle('open'); }
+const faqListEl = document.getElementById('faqList');
+if(faqListEl){
+  faqListEl.innerHTML = FAQS.map((f,i)=>`
+    <div class="faq-item" id="faq${i}">
+      <div class="faq-q" onclick="toggleFaq(${i})"><span>${f[0]}</span><span class="chev">+</span></div>
+      <div class="faq-a">${f[1]}</div>
+    </div>`).join('');
+}
+function toggleFaq(i){ document.getElementById('faq'+i)?.classList.toggle('open'); }
 
 function submitContact(e){
   e.preventDefault();
@@ -183,7 +176,7 @@ function submitContact(e){
 }
 
 /* ============================================================
-   FOOTER (rendered identically on public site & app views)
+   FOOTER
    ============================================================ */
 function footerHTML(){
   return `
@@ -194,14 +187,17 @@ function footerHTML(){
           <div class="logo" style="color:#fff;margin-bottom:10px;"><div class="logo-mark">🌱</div>AgroMentor</div>
           <p>Plateforme de parrainage et de mentorat du département Sciences et Techniques Agro-Alimentaires et Nutritionnelles (STAAN).</p>
           <div class="social-row">
-            <a href="#" onclick="return false;">f</a><a href="#" onclick="return false;">in</a><a href="#" onclick="return false;">ig</a>
+            <a href="#" onclick="return false;" title="Facebook">f</a>
+            <a href="#" onclick="return false;" title="LinkedIn">in</a>
+            <a href="#" onclick="return false;" title="Instagram">ig</a>
           </div>
         </div>
         <div><h5>Département</h5>
           <a href="#about">À propos</a><a href="#how">Comment ça fonctionne</a><a href="#contact">Coordonnées</a>
         </div>
         <div><h5>Ressources</h5>
-          <a href="#faq">FAQ</a><a href="#" onclick="event.preventDefault();toast('Politique de confidentialité disponible sur demande à l\\'administration.')">Politique de confidentialité</a>
+          <a href="#faq">FAQ</a>
+          <a href="#" onclick="event.preventDefault();toast('Politique de confidentialité disponible sur demande à l\\'administration.')">Politique de confidentialité</a>
           <a href="#" onclick="event.preventDefault();toast('Conditions d\\'utilisation disponibles sur demande à l\\'administration.')">Conditions d'utilisation</a>
         </div>
         <div><h5>Contact</h5>
@@ -216,37 +212,33 @@ function footerHTML(){
     </div>
   </footer>`;
 }
-document.getElementById('footer-public').innerHTML = footerHTML();
-document.getElementById('footer-app').innerHTML = footerHTML();
+const footerPublic = document.getElementById('footer-public');
+const footerApp = document.getElementById('footer-app');
+if(footerPublic) footerPublic.innerHTML = footerHTML();
+if(footerApp) footerApp.innerHTML = footerHTML();
 
 /* ============================================================
-   SHARE — copie un lien qui redirige directement vers le site
+   SHARE
    ============================================================ */
-function baseShareLink(){
-  return location.origin + location.pathname;
-}
+function baseShareLink(){ return location.origin + location.pathname; }
 async function copyLink(link){
-  try{
-    await navigator.clipboard.writeText(link);
-    return true;
-  }catch(e){
-    // fallback
-    const t=document.createElement('textarea'); t.value=link; document.body.appendChild(t);
-    t.select(); document.execCommand('copy'); t.remove();
-    return true;
+  try{ await navigator.clipboard.writeText(link); return true; }
+  catch(e){
+    const t = document.createElement('textarea'); t.value=link; document.body.appendChild(t);
+    t.select(); document.execCommand('copy'); t.remove(); return true;
   }
 }
 async function shareSite(){
   const link = baseShareLink();
   await copyLink(link);
-  toast('Lien copié : '+link+' — quiconque l\'ouvre est redirigé directement vers AgroMentor.','Partagé');
+  toast('Lien copié : '+link,'Partagé');
 }
 async function shareResource(id){
   const link = baseShareLink()+'#ressource-'+id;
   await copyLink(link);
   const r = DB.resources.find(x=>x.id===id);
   if(r){ r.shares=(r.shares||0)+1; await saveKey('resources'); renderResources(); }
-  toast('Lien de la ressource copié, prêt à être repartagé.','Repartagé');
+  toast('Lien de la ressource copié.','Repartagé');
 }
 
 /* ============================================================
@@ -269,7 +261,32 @@ document.addEventListener('click', function(e){
 });
 
 /* ============================================================
-   AUTH — login / register (multi-step)
+   SCROLL EFFECTS — nav shadow + back-to-top + reveal
+   ============================================================ */
+const mainNav = document.getElementById('mainNav');
+const backToTopBtn = document.getElementById('backToTop');
+
+// Scroll reveal observer
+const revealObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting){
+      entry.target.classList.add('revealed');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el=>revealObserver.observe(el));
+
+window.addEventListener('scroll', ()=>{
+  // Nav shadow
+  if(mainNav) mainNav.classList.toggle('scrolled', window.scrollY > 20);
+  // Back to top
+  if(backToTopBtn) backToTopBtn.classList.toggle('visible', window.scrollY > 400);
+}, { passive: true });
+
+/* ============================================================
+   AUTH — login / register
    ============================================================ */
 function openAuth(mode){
   document.getElementById('authOverlay').classList.add('show');
@@ -351,9 +368,10 @@ function renderRegStep(){
       <div class="field"><label>Adresse e-mail universitaire</label><input type="email" id="rEmail" value="${regData.email||''}" placeholder="prenom.nom@uam.edu.sn"></div>
       <div class="field"><label>Téléphone</label><input id="rTel" value="${regData.tel||''}"></div>
       <div class="form-grid">
-        <div class="field"><label>Mot de passe</label><input type="password" id="rPass"></div>
+        <div class="field"><label>Mot de passe</label><input type="password" id="rPass" oninput="checkPassStrength()"></div>
         <div class="field"><label>Confirmation</label><input type="password" id="rPass2"></div>
       </div>
+      <div id="passStrength" style="height:6px;border-radius:99px;margin-bottom:14px;background:var(--line);overflow:hidden;"><div id="passStrengthFill" style="height:100%;width:0;border-radius:99px;transition:.3s;"></div></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="regStep=0;renderRegStep()">Retour</button>
         <button class="btn btn-primary" onclick="regNext(1)">Continuer</button>
@@ -396,6 +414,20 @@ function renderRegStep(){
       </div>`;
   }
 }
+function checkPassStrength(){
+  const pass = document.getElementById('rPass')?.value || '';
+  const fill = document.getElementById('passStrengthFill');
+  if(!fill) return;
+  let strength = 0;
+  if(pass.length >= 6) strength++;
+  if(pass.length >= 10) strength++;
+  if(/[A-Z]/.test(pass) && /[a-z]/.test(pass)) strength++;
+  if(/[0-9]/.test(pass)) strength++;
+  if(/[^A-Za-z0-9]/.test(pass)) strength++;
+  const pct = (strength/5)*100;
+  fill.style.width = pct+'%';
+  fill.style.background = pct < 40 ? '#C24A3A' : pct < 70 ? '#E2762E' : '#2F6B45';
+}
 function toggleChip(el,field,val){
   el.classList.toggle('sel');
   const arr = regData[field];
@@ -421,6 +453,7 @@ function regNext(step){
     if(!regData.email||!regData.password){ toast("E-mail et mot de passe requis."); return; }
     if(!regData.email.endsWith('@uam.edu.sn')){ toast("Utilisez votre adresse universitaire, terminant par @uam.edu.sn."); return; }
     if(regData.password!==p2){ toast("Les mots de passe ne correspondent pas."); return; }
+    if(regData.password.length < 6){ toast("Le mot de passe doit contenir au moins 6 caractères."); return; }
     if(findUser(regData.email)){ toast("Un compte existe déjà avec cet e-mail."); return; }
   }
   if(step===2){
@@ -463,7 +496,8 @@ async function tryAutoMatch(user){
   let best=null, bestScore=-1;
   candidates.forEach(c=>{
     const shared = (c.interests||[]).filter(i=>(user.interests||[]).includes(i)).length;
-    const score = shared*20 + (c.domaine===user.domaine?15:0) + (c.dispo===user.dispo?10:0);
+    const sharedAct = (c.activities||[]).filter(i=>(user.activities||[]).includes(i)).length;
+    const score = shared*20 + sharedAct*10 + (c.domaine===user.domaine?15:0) + (c.dispo===user.dispo?10:0) + (c.niveau===user.niveau?5:0);
     if(score>bestScore){ bestScore=score; best=c; }
   });
   if(!best) return;
@@ -633,11 +667,12 @@ async function saveProfile(){
 async function changePassword(){
   const p1=document.getElementById('pPass1').value, p2=document.getElementById('pPass2').value;
   if(!p1||p1!==p2){ toast("Les mots de passe ne correspondent pas."); return; }
+  if(p1.length < 6){ toast("Le mot de passe doit contenir au moins 6 caractères."); return; }
   me().password=p1; await saveKey('users');
   toast("Mot de passe changé avec succès.");
 }
 async function deleteMyAccount(){
-  if(!confirm("Confirmer la suppression définitive de votre compte ?")) return;
+  if(!confirm("⚠️ Confirmer la suppression définitive de votre compte ? Cette action est irréversible.")) return;
   await removeUserCascade(SESSION);
   toast("Compte supprimé.");
   logout();
@@ -648,11 +683,11 @@ async function removeUserCascade(email){
     const involved = b.parrainEmail===email||b.filleulEmail===email;
     return !involved;
   });
-  DB.resources.forEach(r=>{ r.likes=(r.likes||[]).filter(l=>l!==email); (r.comments||[]).forEach(c=>{}); });
+  DB.resources.forEach(r=>{ r.likes=(r.likes||[]).filter(l=>l!==email); });
   await saveKey('users'); await saveKey('binomes'); await saveKey('resources');
 }
 
-/* ---------- USER: resources (share / like / comment / download / save / share-link) ---------- */
+/* ---------- USER: resources ---------- */
 function renderResources(){
   const u=me();
   document.getElementById('appContent').innerHTML = `
@@ -668,18 +703,20 @@ function renderResources(){
       <button class="btn btn-primary" onclick="addResource()">Publier</button>
     </div>
     <div id="resList"></div>`;
-  renderResourceList('resList', DB.resources.slice().reverse());
+  renderResourceList('resList', DB.resources.filter(r=>!r.hidden).slice().reverse());
 }
 function renderResourceList(targetId, list){
   const u=me();
-  document.getElementById(targetId).innerHTML = list.map(r=>{
+  const target = document.getElementById(targetId);
+  if(!target) return;
+  target.innerHTML = list.map(r=>{
     const author = findUser(r.author);
     const liked = (r.likes||[]).includes(u.email);
     const saved = (u.saved||[]).includes(r.id);
     return `<div class="res-card" id="rc-${r.id}">
       <div class="res-top">
         <div><span class="res-type">${r.type}</span><h4 style="margin:4px 0;color:var(--forest);">${r.title}</h4>
-        <span style="font-size:12px;color:var(--ink-soft);">par ${author? author.prenom+' '+author.nom : 'Utilisateur'}</span></div>
+        <span style="font-size:12px;color:var(--ink-soft);">par ${author? author.prenom+' '+author.nom : 'Utilisateur'} · ${new Date(r.createdAt).toLocaleDateString('fr-FR')}</span></div>
       </div>
       <p style="font-size:13.5px;color:var(--ink-soft);word-break:break-all;">${r.link||''}</p>
       <div class="res-actions">
@@ -691,7 +728,7 @@ function renderResourceList(targetId, list){
       <div class="comment-box">
         ${(r.comments||[]).map(c=>`<div class="comment-line"><b>${c.author}:</b> ${c.text}</div>`).join('')}
         <div style="display:flex;gap:8px;margin-top:8px;">
-          <input placeholder="Ajouter un commentaire..." id="cin-${r.id}" style="flex:1;">
+          <input placeholder="Ajouter un commentaire..." id="cin-${r.id}" style="flex:1;" onkeydown="if(event.key==='Enter')addComment('${r.id}')">
           <button class="btn btn-sm btn-outline" onclick="addComment('${r.id}')">Envoyer</button>
         </div>
       </div>
@@ -738,8 +775,8 @@ async function addComment(id){
 }
 function renderSaved(){
   const u=me();
-  renderResourceList('appContent', DB.resources.filter(r=>(u.saved||[]).includes(r.id)));
-  document.getElementById('appContent').insertAdjacentHTML('afterbegin','<div class="panel"><h3>Mes éléments enregistrés</h3><p style="color:var(--ink-soft);font-size:13.5px;">Retrouvez ici vos ressources, discussions et annonces sauvegardées.</p></div>');
+  document.getElementById('appContent').innerHTML = '<div class="panel"><h3>Mes éléments enregistrés</h3><p style="color:var(--ink-soft);font-size:13.5px;">Retrouvez ici vos ressources, discussions et annonces sauvegardées.</p></div><div id="savedList"></div>';
+  renderResourceList('savedList', DB.resources.filter(r=>(u.saved||[]).includes(r.id)));
 }
 
 /* ---------- USER: messages ---------- */
@@ -811,7 +848,17 @@ function renderAdminOverview(){
   const nbDl = DB.resources.reduce((s,r)=>s+(r.downloads||0),0);
   const activeUsers = DB.users.filter(u=>u.status==='actif').length;
   const newSignups = DB.users.filter(u=>u.createdAt && (Date.now()-u.createdAt)<7*86400000).length;
-  document.getElementById('statBinomes').textContent = actifs;
+
+  // Update public stats
+  const statBinomesEl = document.getElementById('statBinomes');
+  const statBinomesBadgeEl = document.getElementById('statBinomesBadge');
+  const statUsersEl = document.getElementById('statUsers');
+  const statResourcesEl = document.getElementById('statResources');
+  if(statBinomesEl) statBinomesEl.textContent = actifs;
+  if(statBinomesBadgeEl) statBinomesBadgeEl.textContent = actifs;
+  if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
+  if(statResourcesEl) animateCounter(statResourcesEl, nbRes);
+
   document.getElementById('appContent').innerHTML = `
     <div class="panel"><h3>Statistiques générales</h3>
       <div class="stat-grid">
@@ -913,7 +960,7 @@ async function createBinomeManual(){
   if(!parrainEmail||!filleulEmail){ toast("Sélectionnez un parrain et un filleul."); return; }
   DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat:100, createdAt:Date.now(), manual:true});
   await saveKey('binomes');
-  await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur."); 
+  await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur.");
   await notify(filleulEmail,"Un binôme a été créé manuellement par l'administrateur.");
   toast("Binôme créé et validé."); renderBinomeTable();
 }
@@ -923,7 +970,8 @@ async function setBinomeStatus(id,status){
   await notify(b.parrainEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
   await notify(b.filleulEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
   renderBinomeTable();
-  document.getElementById('statBinomes') && (document.getElementById('statBinomes').textContent = DB.binomes.filter(x=>x.status==='validé').length);
+  const statEl = document.getElementById('statBinomes');
+  if(statEl) statEl.textContent = DB.binomes.filter(x=>x.status==='validé').length;
 }
 async function modifyBinome(id){
   const b=DB.binomes.find(x=>x.id===id);
@@ -969,7 +1017,7 @@ async function deleteComment(id,idx){
 }
 
 /* ============================================================
-   DEEP LINK — ouvrir directement une ressource partagée
+   DEEP LINK
    ============================================================ */
 function handleDeepLink(){
   if(location.hash.startsWith('#ressource-') && SESSION){
@@ -982,62 +1030,57 @@ function handleDeepLink(){
    SHOWCASE (public sponsors/sponsees preview)
    ============================================================ */
 function renderShowcase(){
-  const sponsors = DB.users.filter(u=>u.role==='parrain').slice(0,3);
-  const sponsees = DB.users.filter(u=>u.role==='filleul').slice(0,3);
+  const sponsors = DB.users.filter(u=>u.role==='parrain' && u.status==='actif').slice(0,3);
+  const sponsees = DB.users.filter(u=>u.role==='filleul' && u.status==='actif').slice(0,3);
   const demo = (list, roleLabel, domains) => (list.length? list : domains.map((d,i)=>({prenom:'Étudiant',nom:(i+1)+'',domaine:d,niveau:['Licence 3','Master 1','Master 2'][i]})))
-    .map(u=>`<div class="people-card"><div class="avatar">${initials((u.prenom||'')+' '+(u.nom||''))}</div><h4>${u.prenom} ${u.nom}</h4><span>${u.niveau||''}</span><br><span class="tag">${u.domaine||roleLabel}</span></div>`).join('');
-  document.getElementById('sponsorShowcase').innerHTML = demo(sponsors,'Parrain',['Agronomie','Nutrition','Agroalimentaire']);
-  document.getElementById('sponseeShowcase').innerHTML = demo(sponsees,'Filleul',['Productions végétales','Recherche scientifique','Développement durable']);
+    .map(u=>`<div class="people-card reveal"><div class="avatar">${initials((u.prenom||'')+' '+(u.nom||''))}</div><h4>${u.prenom} ${u.nom}</h4><span>${u.niveau||''}</span><br><span class="tag">${u.domaine||roleLabel}</span></div>`).join('');
+  const sponsorEl = document.getElementById('sponsorShowcase');
+  const sponseeEl = document.getElementById('sponseeShowcase');
+  if(sponsorEl) sponsorEl.innerHTML = demo(sponsors,'Parrain',['Agronomie','Nutrition','Agroalimentaire']);
+  if(sponseeEl) sponseeEl.innerHTML = demo(sponsees,'Filleul',['Productions végétales','Recherche scientifique','Développement durable']);
+  // Re-observe new reveal elements
+  document.querySelectorAll('.reveal:not(.revealed)').forEach(el=>revealObserver.observe(el));
 }
 
 /* ============================================================
-   DÉSACTIVATION DU CLIC DROIT
+   SYNC
    ============================================================ */
-document.addEventListener('contextmenu', function(e){
-  e.preventDefault();
-  toast("Le clic droit est désactivé sur ce site.");
-  return false;
-});
+async function syncOnlineData() {
+  try {
+    toast("Mise à jour des données depuis le Cloud...","Synchronisation");
+    await loadDB();
+    toast("Données synchronisées avec succès !","Terminé");
+    // Re-render current view
+    const u = me();
+    if(u) goto(u.role==='admin'?'admin-overview':'dashboard');
+  } catch (error) {
+    console.error("Erreur de synchronisation :", error);
+    toast("Impossible de synchroniser les données.","Erreur");
+  }
+}
+
+// Auto-refresh every 30s
+setInterval(() => {
+  if(SESSION) loadDB();
+}, 30000);
 
 /* ============================================================
    INIT
    ============================================================ */
 (async function init(){
   await loadDB();
-  document.getElementById('statBinomes').textContent = DB.binomes.filter(b=>b.status==='validé').length;
+  const actifs = DB.binomes.filter(b=>b.status==='validé').length;
+  const statBinomesEl = document.getElementById('statBinomes');
+  const statBinomesBadgeEl = document.getElementById('statBinomesBadge');
+  const statUsersEl = document.getElementById('statUsers');
+  const statResourcesEl = document.getElementById('statResources');
+  if(statBinomesEl) animateCounter(statBinomesEl, actifs);
+  if(statBinomesBadgeEl) animateCounter(statBinomesBadgeEl, actifs);
+  if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
+  if(statResourcesEl) animateCounter(statResourcesEl, DB.resources.length);
   renderShowcase();
   if(SESSION && findUser(SESSION)){
     enterApp();
     handleDeepLink();
   }
 })();
-/* ============================================================\
-   FONCTION DE SYNCHRONISATION EN TEMPS RÉEL (BOUTON DE RAFrAÎCHISSEMENT)
-   ============================================================ */
-async function syncOnlineData() {
-  try {
-    toast("Mise à jour des données depuis le Cloud...", "Synchronisation");
-    await loadDB(); // Recharge les listes d'utilisateurs, binômes, etc.
-    
-    // Si l'utilisateur est sur le tableau de bord, on rafraîchit son affichage
-    if (typeof renderApp === 'function') {
-      renderApp();
-    }
-    // Si la fonction d'affichage des parrains/filleuls existe sur la page d'accueil
-    if (typeof updateShowcases === 'function') {
-      updateShowcases();
-    }
-    
-    toast("Données synchronisées avec succès !", "Terminé");
-  } catch (error) {
-    console.error("Erreur de synchronisation :", error);
-    toast("Impossible de synchroniser les données.", "Erreur");
-  }
-}
-
-// Optionnel : Lancer automatiquement une vérification toutes les 30 secondes
-setInterval(() => {
-  if (SESSION) { // Seulement si quelqu'un (comme l'admin) est connecté
-    loadDB().then(() => { if (typeof renderApp === 'function') renderApp(); });
-  }
-}, 30000);
