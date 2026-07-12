@@ -11,6 +11,13 @@ let regStep = 0;
 let regData = { interests: [], activities: [] };
 const CREDIT_HTML = ''; // ⚠️ remettez ici votre texte/lien de crédit d'origine si vous en aviez un
 
+// ⚠️ Listes utilisées à l'étape "Questionnaire" de l'inscription — elles
+// n'étaient déclarées nulle part, ce qui faisait planter renderRegStep()
+// dès l'affichage de cette étape (et donc "sautait" les centres d'intérêt).
+// Adaptez librement leur contenu à vos besoins.
+const INTERESTS = ['Agronomie','Nutrition','Agroalimentaire','Sécurité alimentaire','Recherche scientifique','Entrepreneuriat agricole','Développement durable','Biotechnologie','Qualité et normes','Élevage','Environnement'];
+const ACTIVITIES = ['Sport','Musique','Bénévolat associatif','Lecture','Théâtre / Arts','Voyages','Jardinage','Cuisine','Photographie','Clubs universitaires'];
+
 /* ---------- Amélioration de saveDB dans script.js ---------- */
 // Identifiant stable d'un enregistrement (email pour users, id pour le reste).
 function recordId(x){ return (x && (x.email || x.id)) || null; }
