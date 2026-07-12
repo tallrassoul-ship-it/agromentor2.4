@@ -1,40 +1,52 @@
 /* ---------- Amélioration de saveDB dans script.js ---------- */
+// Identifiant stable d'un enregistrement (email pour users, id pour le reste).
+function recordId(x){ return (x && (x.email || x.id)) || null; }
+
+// Instantané des identifiants connus au dernier chargement/enregistrement,
+// par clé. Sert de référence pour distinguer :
+//  - un élément supprimé localement (présent dans LAST_SYNCED, absent de DB[key])
+//    → ne doit PAS être réintégré par la fusion
+//  - un élément ajouté par un autre utilisateur pendant notre session
+//    (absent de LAST_SYNCED, présent dans le cloud) → doit être récupéré
+let LAST_SYNCED = {};
+
 async function saveDB(key) {
   if (!DB[key]) return;
   try {
-    // ÉTAPE CRUCIALE : Avant d'écrire, on va chercher ce qu'il y a sur Firebase 
-    // pour éviter d'écraser les modifications faites par un autre utilisateur
+    let finalList = DB[key];
     try {
+      // ÉTAPE CRUCIALE : avant d'écrire, on regarde ce qu'il y a dans le
+      // stockage partagé pour ne pas écraser les modifications faites
+      // entre-temps par un autre utilisateur.
       const r = await window.storage.get('am_' + key, true);
       if (r && r.value) {
         const cloudList = JSON.parse(r.value);
         if (Array.isArray(cloudList) && Array.isArray(DB[key])) {
-          
-          // Fusion de sécurité : on combine notre liste locale et celle du Cloud
-          const merged = [...cloudList];
-          DB[key].forEach(localItem => {
-            const index = merged.findIndex(cloudItem => {
-              if (cloudItem.email && localItem.email) return cloudItem.email === localItem.email;
-              if (cloudItem.id && localItem.id) return cloudItem.id === localItem.id;
-              return false;
-            });
-            if (index !== -1) {
-              merged[index] = localItem; // Priorité à notre modification locale
-            } else {
-              merged.push(localItem);
-            }
+          const known = LAST_SYNCED[key] || new Set();
+          const localIds = new Set(DB[key].map(recordId).filter(Boolean));
+
+          // On ne récupère du cloud QUE les éléments qu'on ne connaissait pas
+          // encore (ajoutés par quelqu'un d'autre depuis notre dernier
+          // chargement). On ne réintègre jamais un élément qu'on a
+          // volontairement supprimé localement.
+          const addedByOthers = cloudList.filter(cloudItem => {
+            const id = recordId(cloudItem);
+            return id && !known.has(id) && !localIds.has(id);
           });
-          DB[key] = merged; // On met à jour notre variable globale
+
+          finalList = [...DB[key], ...addedByOthers];
+          DB[key] = finalList; // nos modifications locales restent prioritaires
         }
       }
     } catch (e) {
       console.log("Pas de données existantes sur le cloud pour fusionner, premier envoi.");
     }
 
-    // Maintenant on envoie la liste fusionnée et propre sur Firebase
-    await window.storage.set('am_' + key, JSON.stringify(DB[key]), true);
+    // Maintenant on envoie la liste fusionnée et propre sur le stockage partagé
+    await window.storage.set('am_' + key, JSON.stringify(finalList), true);
+    LAST_SYNCED[key] = new Set(finalList.map(recordId).filter(Boolean));
   } catch (e) {
-    console.error("Erreur lors de la sauvegarde Firebase pour " + key, e);
+    console.error("Erreur lors de la sauvegarde pour " + key, e);
   }
 }
 
@@ -45,15 +57,21 @@ async function loadDB(){
       const r = await window.storage.get('am_'+key, true);
       DB[key] = r && r.value ? JSON.parse(r.value) : [];
     }catch(e){ DB[key] = []; }
+    LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
   try{
     const s = await window.storage.get('am_session', false);
     if(s && s.value) SESSION = JSON.parse(s.value).email;
   }catch(e){ SESSION = null; }
 }
+// saveKey() est l'unique point d'écriture utilisé par le reste de l'app.
+// Il délègue à saveDB() pour bénéficier de la fusion anti-écrasement
+// (indispensable car am_users/am_binomes/... sont des clés PARTAGÉES
+// entre tous les utilisateurs : sans fusion, deux écritures concurrentes
+// s'écrasent silencieusement l'une l'autre).
 async function saveKey(key){
   try{
-    await window.storage.set('am_'+key, JSON.stringify(DB[key]), true);
+    await saveDB(key);
   }catch(e){ toast("Erreur de sauvegarde des données."); }
 }
 async function saveSession(){
