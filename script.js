@@ -73,8 +73,15 @@ async function loadDB(){
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
   try{
-    const s = await window.storage.get('am_session', false);
-    if(s && s.value) SESSION = JSON.parse(s.value).email;
+    // La session ("qui est connecté") est PERSONNELLE à cet appareil/navigateur :
+    // elle est donc lue depuis localStorage, jamais depuis le cloud partagé
+    // (storage-shim.js écrit tout dans le même document Firestore global,
+    // "personnel" ou non — utiliser window.storage ici connectait
+    // automatiquement n'importe qui, sur n'importe quel appareil, avec la
+    // dernière session enregistrée par n'importe qui d'autre, admin inclus).
+    const raw = localStorage.getItem('am_session');
+    if(raw) SESSION = JSON.parse(raw).email;
+    else SESSION = null;
   }catch(e){ SESSION = null; }
 }
 // saveKey() est l'unique point d'écriture utilisé par le reste de l'app.
@@ -89,8 +96,8 @@ async function saveKey(key){
 }
 async function saveSession(){
   try{
-    if(SESSION) await window.storage.set('am_session', JSON.stringify({email:SESSION}), false);
-    else await window.storage.delete('am_session', false);
+    if(SESSION) localStorage.setItem('am_session', JSON.stringify({email:SESSION}));
+    else localStorage.removeItem('am_session');
   }catch(e){}
 }
 
