@@ -155,6 +155,9 @@ if(rotatorEl) rotatorEl.style.transition = 'opacity .3s ease';
    ============================================================ */
 function animateCounter(el, target, duration = 1200) {
   if(!el) return;
+  // Ne pas relancer l'animation si la valeur affichée est déjà la bonne
+  const currentVal = parseInt(el.textContent, 10);
+  if(currentVal === target) return;
   if(target === 0){ el.textContent = '0'; return; }
   let start = 0;
   const step = (timestamp) => {
@@ -216,15 +219,29 @@ if(faqListEl){
 }
 function toggleFaq(i){ document.getElementById('faq'+i)?.classList.toggle('open'); }
 
+let contactSending = false;
 async function submitContact(e){
   e.preventDefault();
-  const name = document.getElementById('cName').value.trim();
-  const email = document.getElementById('cEmail').value.trim();
-  const subject = document.getElementById('cSubject').value;
-  const msg = document.getElementById('cMsg').value.trim();
-  await notify(ADMIN_EMAIL, `📩 Message de contact — ${name} (${email}) — Sujet : ${subject} — ${msg}`);
-  toast("Merci ! Votre message a été transmis à l'administration.","Message envoyé");
-  e.target.reset();
+  if(contactSending) return false;
+  contactSending = true;
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi en cours...'; }
+  try {
+    const name = document.getElementById('cName').value.trim();
+    const email = document.getElementById('cEmail').value.trim();
+    const subject = document.getElementById('cSubject').value;
+    const msg = document.getElementById('cMsg').value.trim();
+    await notify(ADMIN_EMAIL, `📩 Message de contact — ${name} (${email}) — Sujet : ${subject} — ${msg}`);
+    toast("Merci ! Votre message a été transmis à l'administration.","Message envoyé");
+    e.target.reset();
+  } catch(err) {
+    console.error("Erreur envoi contact:", err);
+    toast("Impossible d'envoyer le message. Vérifiez votre connexion.","Erreur");
+  } finally {
+    contactSending = false;
+    if(btn){ btn.disabled = false; btn.textContent = originalText; }
+  }
   return false;
 }
 
@@ -290,7 +307,7 @@ async function shareResource(id){
   const link = baseShareLink()+'#ressource-'+id;
   await copyLink(link);
   const r = DB.resources.find(x=>x.id===id);
-  if(r){ r.shares=(r.shares||0)+1; await saveKey('resources'); renderResources(); }
+  if(r){ r.shares=(r.shares||0)+1; await saveKey('resources'); originalGoto(currentView); }
   toast('Lien de la ressource copié.','Repartagé');
 }
 
@@ -367,6 +384,10 @@ function renderLogin(){
         <a style="color:var(--green);font-weight:600;cursor:pointer;" onclick="regStep=0;regData={interests:[],activities:[]};renderRegister()">S'inscrire</a></p>
     </form>`;
 }
+// ⚠️ SÉCURITÉ : Le hash ci-dessous est visible côté client (n'importe qui peut
+// inspecter le code source). Pour une protection réelle, migrez vers
+// Firebase Authentication (https://firebase.google.com/docs/auth) ou un
+// backend dédié. Le hash SHA-256 simple reste vulnérable au cassage offline.
 const ADMIN_EMAIL = 'admin@uam.edu.sn';
 const ADMIN_PASS_HASH = 'e5993e7e962d8c76f8a584c80b6bece951d6c3d1e6930969e38357f327ccd3ad';
 async function sha256(text){
@@ -942,8 +963,9 @@ function renderAdminOverview(){
   const nbFilleuls = DB.users.filter(u=>u.role==='filleul').length;
   const actifs = DB.binomes.filter(b=>b.status==='validé').length;
   const avgCompat = DB.binomes.length? Math.round(DB.binomes.reduce((s,b)=>s+(b.compat||0),0)/DB.binomes.length) : 0;
-  const nbRes = DB.resources.length;
-  const nbDl = DB.resources.reduce((s,r)=>s+(r.downloads||0),0);
+  const visibleRes = DB.resources.filter(r=>!r.hidden);
+  const nbRes = visibleRes.length;
+  const nbDl = visibleRes.reduce((s,r)=>s+(r.downloads||0),0);
   const activeUsers = DB.users.filter(u=>u.status==='actif').length;
   const newSignups = DB.users.filter(u=>u.createdAt && (Date.now()-u.createdAt)<7*86400000).length;
 
