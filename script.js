@@ -553,8 +553,9 @@ function enterApp(){
   goto(u.role==='admin'?'admin-overview':'dashboard');
 }
 async function logout(){
-  SESSION=null; 
+  SESSION=null;
   currentChatWith=null;
+  await saveSession(); // Supprime la session du stockage
   document.getElementById('view-app').classList.remove('active');
   document.getElementById('view-site').classList.add('active');
   window.scrollTo(0,0);
@@ -730,9 +731,9 @@ async function removeUserCascade(email){
   // 6. Supprimer ses notifications
   DB.notifications = DB.notifications.filter(n=>n.forEmail!==email);
 
-  // 7. Le retirer des listes saved des autres utilisateurs
+  // 7. Le retirer des listes saved des autres utilisateurs (garde seulement les ressources qui existent encore)
   DB.users.forEach(u=>{
-    if(u.saved) u.saved = u.saved.filter(id=>!DB.resources.find(r=>r.id===id));
+    if(u.saved) u.saved = u.saved.filter(id=>DB.resources.find(r=>r.id===id));
   });
 
   // 8. Sauvegarder toutes les collections modifiées
@@ -832,7 +833,7 @@ async function addComment(id){
 function renderSaved(){
   const u=me();
   document.getElementById('appContent').innerHTML = '<div class="panel"><h3>Mes éléments enregistrés</h3><p style="color:var(--ink-soft);font-size:13.5px;">Retrouvez ici vos ressources, discussions et annonces sauvegardées.</p></div><div id="savedList"></div>';
-  renderResourceList('savedList', DB.resources.filter(r=>(u.saved||[]).includes(r.id)));
+  renderResourceList('savedList', DB.resources.filter(r=>!r.hidden && (u.saved||[]).includes(r.id)));
 }
 
 /* ---------- USER: messages ---------- */
@@ -878,7 +879,7 @@ async function sendMsg(){
   DB.messages.push({id:uid(), from:u.email, to:currentChatWith, text, ts:Date.now(), read:false});
   await saveKey('messages');
   await notify(currentChatWith, `Nouveau message de ${u.prenom} ${u.nom}.`);
-  input.value=''; renderChatMsgs(); await saveKey('messages');
+  input.value=''; renderChatMsgs();
 }
 
 /* ---------- USER: notifications ---------- */
@@ -1062,13 +1063,13 @@ function renderAdminResources(){
   document.getElementById('modList').innerHTML = DB.resources.slice().reverse().map(r=>{
     const author=findUser(r.author);
     return `<div class="res-card">
-      <div class="res-top"><div><span class="res-type">${r.type}</span><h4 style="margin:4px 0;">${r.title}</h4>
-      <span style="font-size:12px;color:var(--ink-soft);">par ${author?author.prenom+' '+author.nom:'—'} · ${r.hidden?'masquée':'visible'}</span></div></div>
+      <div class="res-top"><div><span class="res-type">${esc(r.type)}</span><h4 style="margin:4px 0;">${esc(r.title)}</h4>
+      <span style="font-size:12px;color:var(--ink-soft);">par ${author?esc(author.prenom+' '+author.nom):'—'} · ${r.hidden?'masquée':'visible'}</span></div></div>
       <div class="res-actions">
         <button onclick="toggleHideResource('${r.id}')">${r.hidden?'Ré-approuver':'Masquer'}</button>
         <button onclick="deleteResource('${r.id}')">Supprimer</button>
       </div>
-      <div class="comment-box">${(r.comments||[]).map((c,i)=>`<div class="comment-line"><b>${c.author}:</b> ${c.text} <button class="icon-btn" style="margin-left:8px;" onclick="deleteComment('${r.id}',${i})">Suppr.</button></div>`).join('')}</div>
+      <div class="comment-box">${(r.comments||[]).map((c,i)=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)} <button class="icon-btn" style="margin-left:8px;" onclick="deleteComment('${r.id}',${i})">Suppr.</button></div>`).join('')}</div>
     </div>`;
   }).join('') || '<p style="color:var(--ink-soft);">Aucune ressource.</p>';
 }
@@ -1129,8 +1130,16 @@ async function syncOnlineData() {
 }
 
 // Auto-refresh every 30s
-setInterval(() => {
-  if(SESSION) loadDB();
+let currentView = 'dashboard';
+const originalGoto = goto;
+goto = function(view){ currentView = view; originalGoto(view); };
+
+setInterval(async () => {
+  if(!SESSION) return;
+  await loadDB();
+  // Re-render current view silencieusement
+  const u = me();
+  if(u) originalGoto(currentView);
 }, 30000);
 
 /* ============================================================
