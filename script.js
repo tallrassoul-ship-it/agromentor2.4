@@ -52,7 +52,7 @@ async function saveDB(key) {
 
 /* ---------- storage helpers ---------- */
 async function loadDB(){
-  const savedSession = SESSION; // Préserver la session en cours
+  const savedSession = SESSION; // Toujours préserver la session en mémoire
   for(const key of Object.keys(DB)){
     try{
       const r = await window.storage.get('am_'+key, true);
@@ -60,26 +60,21 @@ async function loadDB(){
     }catch(e){ DB[key] = []; }
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
-  // Restaurer la session si elle était active
-  if(!savedSession){
-    try{
-      const s = await window.storage.get('am_session', false);
-      if(s && s.value) SESSION = JSON.parse(s.value).email;
-    }catch(e){ SESSION = null; }
-  } else {
-    SESSION = savedSession;
-  }
+  // La session n'est JAMAIS restaurée depuis le stockage —
+  // l'utilisateur doit se reconnecter à chaque visite du site.
+  // Mais on la préserve si elle existe déjà en mémoire (bouton Actualiser).
+  if(!savedSession) SESSION = null;
+  else SESSION = savedSession;
 }
 
 async function saveKey(key){
   try{ await saveDB(key); }catch(e){ toast("Erreur de sauvegarde des données."); }
 }
-// Session persistée pour permettre le refresh sans déconnexion
+// Session uniquement en mémoire — jamais persistée dans le stockage.
+// L'utilisateur doit se reconnecter à chaque visite du site,
+// mais le bouton "Actualiser" préserve la session en mémoire.
 async function saveSession(){
-  try{
-    if(SESSION) await window.storage.set('am_session', JSON.stringify({email:SESSION}), false);
-    else await window.storage.delete('am_session', false);
-  }catch(e){}
+  // Aucune persistance — la session ne survit pas au rechargement de page
 }
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
@@ -103,6 +98,10 @@ function esc(str){
   const d = document.createElement('div');
   d.textContent = str || '';
   return d.innerHTML;
+}
+// Escape for HTML attribute values (handles quotes)
+function escAttr(str){
+  return (str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 /* ---------- notifications ---------- */
@@ -133,6 +132,7 @@ if(rotatorEl) rotatorEl.style.transition = 'opacity .3s ease';
    ============================================================ */
 function animateCounter(el, target, duration = 1200) {
   if(!el) return;
+  if(target === 0){ el.textContent = '0'; return; }
   let start = 0;
   const step = (timestamp) => {
     if(!start) start = timestamp;
@@ -376,11 +376,11 @@ function renderRegStep(){
   if(regStep===0){
     body.innerHTML = `
       <div class="form-grid">
-        <div class="field"><label>Nom</label><input id="rNom" value="${regData.nom||''}"></div>
-        <div class="field"><label>Prénom</label><input id="rPrenom" value="${regData.prenom||''}"></div>
-        <div class="field"><label>Date de naissance</label><input type="date" id="rDob" value="${regData.dob||''}"></div>
+        <div class="field"><label>Nom</label><input id="rNom" value="${escAttr(regData.nom||'')}"></div>
+        <div class="field"><label>Prénom</label><input id="rPrenom" value="${escAttr(regData.prenom||'')}"></div>
+        <div class="field"><label>Date de naissance</label><input type="date" id="rDob" value="${escAttr(regData.dob||'')}"></div>
         <div class="field"><label>Sexe</label><select id="rSexe"><option ${regData.sexe==='F'?'selected':''}>Féminin</option><option ${regData.sexe==='M'?'selected':''}>Masculin</option></select></div>
-        <div class="field"><label>Ville d'origine</label><input id="rVille" value="${regData.ville||''}"></div>
+        <div class="field"><label>Ville d'origine</label><input id="rVille" value="${escAttr(regData.ville||'')}"></div>
         <div class="field"><label>Niveau d'étude</label><select id="rNiveau">
           ${['Licence 1','Licence 2','Licence 3','Master 1','Master 2'].map(n=>`<option ${regData.niveau===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
@@ -391,8 +391,8 @@ function renderRegStep(){
       <div class="field"><label>Je m'inscris en tant que</label>
         <select id="rRole"><option value="filleul" ${regData.role==='filleul'?'selected':''}>Filleul (accompagné)</option><option value="parrain" ${regData.role==='parrain'?'selected':''}>Parrain (mentor)</option></select>
       </div>
-      <div class="field"><label>Adresse e-mail universitaire</label><input type="email" id="rEmail" value="${regData.email||''}" placeholder="prenom.nom@uam.edu.sn"></div>
-      <div class="field"><label>Téléphone</label><input id="rTel" value="${regData.tel||''}"></div>
+      <div class="field"><label>Adresse e-mail universitaire</label><input type="email" id="rEmail" value="${escAttr(regData.email||'')}" placeholder="prenom.nom@uam.edu.sn"></div>
+      <div class="field"><label>Téléphone</label><input id="rTel" value="${escAttr(regData.tel||'')}"></div>
       <div class="form-grid">
         <div class="field"><label>Mot de passe</label><input type="password" id="rPass" oninput="checkPassStrength()"></div>
         <div class="field"><label>Confirmation</label><input type="password" id="rPass2"></div>
@@ -411,15 +411,15 @@ function renderRegStep(){
         ${ACTIVITIES.map(i=>`<div class="chip ${regData.activities.includes(i)?'sel':''}" onclick="toggleChip(this,'activities','${i}')">${i}</div>`).join('')}
       </div></div>
       <div class="form-grid">
-        <div class="field"><label>Compétences</label><input id="rComp" value="${regData.competences||''}" placeholder="Ex: analyse sensorielle, Excel"></div>
-        <div class="field"><label>Objectifs académiques</label><input id="rObj" value="${regData.objectifs||''}" placeholder="Ex: réussir mon Master"></div>
+        <div class="field"><label>Compétences</label><input id="rComp" value="${escAttr(regData.competences||'')}" placeholder="Ex: analyse sensorielle, Excel"></div>
+        <div class="field"><label>Objectifs académiques</label><input id="rObj" value="${escAttr(regData.objectifs||'')}" placeholder="Ex: réussir mon Master"></div>
         <div class="field"><label>Personnalité</label><select id="rPerso">
           ${['Introverti(e)','Extraverti(e)','Ambivert(e)'].map(n=>`<option ${regData.perso===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
         <div class="field"><label>Disponibilités</label><select id="rDispo">
           ${['Matin','Après-midi','Soir','Week-end'].map(n=>`<option ${regData.dispo===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
-        <div class="field"><label>Domaine préféré</label><input id="rDomaine" value="${regData.domaine||''}" placeholder="Ex: Nutrition"></div>
+        <div class="field"><label>Domaine préféré</label><input id="rDomaine" value="${escAttr(regData.domaine||'')}" placeholder="Ex: Nutrition"></div>
         <div class="field"><label>Expérience</label><select id="rExp">
           ${['Débutant','Intermédiaire','Avancé'].map(n=>`<option ${regData.exp===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
@@ -577,20 +577,22 @@ function renderSidebar(mode){
     ['admin-users','👥','Utilisateurs'],
     ['admin-binomes','🤝','Binômes'],
     ['admin-resources','📚','Ressources'],
+    ['admin-notifications','🔔','Notifications'],
   ];
   const links = mode==='admin'? adminLinks : userLinks;
   document.getElementById('sidebar').innerHTML = `
     <div class="logo">🌱 AgroMentor</div>
     ${links.map(l=>`<a class="side-link" id="side-${l[0]}" onclick="goto('${l[0]}')">${l[1]} ${l[2]}</a>`).join('')}
     <div class="side-bottom">
-      <div class="side-link" style="opacity:.8;cursor:default;">👤 ${u.prenom} ${u.nom}</div>
+      <div class="side-link" style="opacity:.8;cursor:default;">👤 ${esc(u.prenom)} ${esc(u.nom)}</div>
     </div>`;
 }
 const TITLES = {
   dashboard:"Vue d'ensemble", profile:"Mon profil", binome:"Mon binôme", resources:"Ressources partagées",
   saved:"Mes éléments enregistrés", messages:"Messagerie", notifications:"Notifications",
   'admin-overview':"Statistiques de la plateforme", 'admin-users':"Gestion des utilisateurs",
-  'admin-binomes':"Gestion des binômes", 'admin-resources':"Gestion des ressources"
+  'admin-binomes':"Gestion des binômes", 'admin-resources':"Gestion des ressources",
+  'admin-notifications':"Notifications"
 };
 function goto(view){
   document.getElementById('topbarTitle').textContent = TITLES[view]||'';
@@ -600,7 +602,8 @@ function goto(view){
     dashboard:renderDashboard, profile:renderProfile, binome:renderBinomeUser, resources:renderResources,
     saved:renderSaved, messages:renderMessages, notifications:renderNotifications,
     'admin-overview':renderAdminOverview, 'admin-users':renderAdminUsers,
-    'admin-binomes':renderAdminBinomes, 'admin-resources':renderAdminResources
+    'admin-binomes':renderAdminBinomes, 'admin-resources':renderAdminResources,
+    'admin-notifications':renderAdminNotifications
   };
   (renderers[view]||renderDashboard)();
 }
@@ -619,8 +622,8 @@ function renderDashboard(){
     <div class="panel profile-card">
       <div class="avatar">${initials(u.prenom+' '+u.nom)}</div>
       <div>
-        <h3 style="margin:0;">${u.prenom} ${u.nom}</h3>
-        <p style="margin:4px 0 0;color:var(--ink-soft);">${u.role==='parrain'?'Parrain':'Filleul'} · ${u.niveau||''} · ${u.domaine||''}</p>
+        <h3 style="margin:0;">${esc(u.prenom)} ${esc(u.nom)}</h3>
+        <p style="margin:4px 0 0;color:var(--ink-soft);">${u.role==='parrain'?'Parrain':'Filleul'} · ${esc(u.niveau||'')} · ${esc(u.domaine||'')}</p>
       </div>
     </div>
     <div class="stat-grid">
@@ -641,7 +644,7 @@ function binomeSummaryHTML(u){
     const otherEmail = valid.parrainEmail===u.email? valid.filleulEmail: valid.parrainEmail;
     const other = findUser(otherEmail);
     return `<div style="display:flex;align-items:center;gap:14px;"><div class="avatar" style="width:52px;height:52px;font-size:16px;">${initials(other?.prenom+' '+other?.nom)}</div>
-      <div><b>${other?.prenom} ${other?.nom}</b><br><span class="badge ok">Binôme validé · ${valid.compat}% compatibilité</span></div></div>`;
+      <div><b>${esc(other?.prenom)} ${esc(other?.nom)}</b><br><span class="badge ok">Binôme validé · ${valid.compat}% compatibilité</span></div></div>`;
   }
   if(pending) return `<span class="badge wait">En attente de validation par l'administrateur (compatibilité estimée ${pending.compat}%)</span>`;
   return `<p style="color:var(--ink-soft);font-size:14px;">Aucune proposition pour le moment. Complétez votre profil pour améliorer votre compatibilité.</p>`;
@@ -659,12 +662,12 @@ function renderProfile(){
     <div class="panel">
       <h3>Informations personnelles</h3>
       <div class="form-grid">
-        <div class="field"><label>Nom</label><input id="pNom" value="${u.nom||''}"></div>
-        <div class="field"><label>Prénom</label><input id="pPrenom" value="${u.prenom||''}"></div>
-        <div class="field"><label>Ville d'origine</label><input id="pVille" value="${u.ville||''}"></div>
-        <div class="field"><label>Téléphone</label><input id="pTel" value="${u.tel||''}"></div>
-        <div class="field"><label>Domaine préféré</label><input id="pDomaine" value="${u.domaine||''}"></div>
-        <div class="field"><label>Niveau d'étude</label><input id="pNiveau" value="${u.niveau||''}"></div>
+        <div class="field"><label>Nom</label><input id="pNom" value="${escAttr(u.nom||'')}"></div>
+        <div class="field"><label>Prénom</label><input id="pPrenom" value="${escAttr(u.prenom||'')}"></div>
+        <div class="field"><label>Ville d'origine</label><input id="pVille" value="${escAttr(u.ville||'')}"></div>
+        <div class="field"><label>Téléphone</label><input id="pTel" value="${escAttr(u.tel||'')}"></div>
+        <div class="field"><label>Domaine préféré</label><input id="pDomaine" value="${escAttr(u.domaine||'')}"></div>
+        <div class="field"><label>Niveau d'étude</label><input id="pNiveau" value="${escAttr(u.niveau||'')}"></div>
       </div>
       <button class="btn btn-primary" onclick="saveProfile()">Enregistrer les modifications</button>
     </div>
@@ -852,7 +855,7 @@ function renderMessages(){
     <div class="chat-wrap">
       <div class="conv-list">${convs.length? convs.map(c=>{
         const cu=findUser(c);
-        return `<div class="conv-item ${c===currentChatWith?'active':''}" onclick="openChat('${c}')">${cu? cu.prenom+' '+cu.nom : c}</div>`;
+        return `<div class="conv-item ${c===currentChatWith?'active':''}" onclick="openChat('${escAttr(c)}')">${cu? esc(cu.prenom+' '+cu.nom) : esc(c)}</div>`;
       }).join('') : '<div style="padding:16px;color:var(--ink-soft);font-size:13px;">Aucune conversation. Un binôme validé apparaîtra ici automatiquement.</div>'}</div>
       <div class="chat-panel">
         <div class="chat-msgs" id="chatMsgs"></div>
@@ -945,7 +948,7 @@ function filterUsers(){
   document.getElementById('userTable').innerHTML = `
     <tr><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr>
     ${list.map(u=>`<tr>
-      <td>${u.prenom} ${u.nom}<br><span style="color:var(--ink-soft);font-size:11.5px;">${u.email}</span></td>
+      <td>${esc(u.prenom)} ${esc(u.nom)}<br><span style="color:var(--ink-soft);font-size:11.5px;">${esc(u.email)}</span></td>
       <td>${u.role==='parrain'?'Parrain':'Filleul'}</td>
       <td><span class="badge ${u.status==='actif'?'ok':'off'}">${u.status}</span></td>
       <td class="row-actions">
@@ -987,8 +990,8 @@ function renderAdminBinomes(){
     <div class="panel">
       <h3>Créer un binôme manuellement</h3>
       <div class="form-grid">
-        <div class="field"><label>Parrain</label><select id="manParrain">${DB.users.filter(u=>u.role==='parrain').map(u=>`<option value="${u.email}">${u.prenom} ${u.nom}</option>`).join('')}</select></div>
-        <div class="field"><label>Filleul</label><select id="manFilleul">${DB.users.filter(u=>u.role==='filleul').map(u=>`<option value="${u.email}">${u.prenom} ${u.nom}</option>`).join('')}</select></div>
+        <div class="field"><label>Parrain</label><select id="manParrain">${DB.users.filter(u=>u.role==='parrain').map(u=>`<option value="${escAttr(u.email)}">${esc(u.prenom)} ${esc(u.nom)}</option>`).join('')}</select></div>
+        <div class="field"><label>Filleul</label><select id="manFilleul">${DB.users.filter(u=>u.role==='filleul').map(u=>`<option value="${escAttr(u.email)}">${esc(u.prenom)} ${esc(u.nom)}</option>`).join('')}</select></div>
       </div>
       <button class="btn btn-primary" onclick="createBinomeManual()">Créer le binôme</button>
     </div>
@@ -1005,8 +1008,8 @@ function renderBinomeTable(){
       const p=findUser(b.parrainEmail), f=findUser(b.filleulEmail);
       const badgeClass = b.status==='validé'?'ok':b.status==='refusé'?'no':'wait';
       return `<tr>
-        <td>${p? p.prenom+' '+p.nom : '—'}</td>
-        <td>${f? f.prenom+' '+f.nom : '—'}</td>
+        <td>${p? esc(p.prenom+' '+p.nom) : '—'}</td>
+        <td>${f? esc(f.prenom+' '+f.nom) : '—'}</td>
         <td>${b.compat||'—'}%</td>
         <td><span class="badge ${badgeClass}">${b.status}</span></td>
         <td class="row-actions">
@@ -1079,11 +1082,46 @@ async function toggleHideResource(id){
 }
 async function deleteResource(id){
   DB.resources = DB.resources.filter(r=>r.id!==id);
-  await saveKey('resources'); toast("Ressource supprimée."); renderAdminResources();
+  // Nettoyer les références saved chez tous les utilisateurs
+  DB.users.forEach(u=>{
+    if(u.saved) u.saved = u.saved.filter(sid=>sid!==id);
+  });
+  await saveKey('resources'); await saveKey('users');
+  toast("Ressource supprimée."); renderAdminResources();
 }
 async function deleteComment(id,idx){
   const r=DB.resources.find(x=>x.id===id); r.comments.splice(idx,1);
   await saveKey('resources'); renderAdminResources();
+}
+
+/* ---------- ADMIN: notifications ---------- */
+function renderAdminNotifications(){
+  const list = DB.notifications.sort((a,b)=>b.ts-a.ts);
+  const unread = list.filter(n=>!n.read).length;
+  document.getElementById('appContent').innerHTML = `
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;">Notifications (${unread} non lues)</h3>
+        <button class="btn btn-ghost btn-sm" onclick="markAllNotificationsRead()">Tout marquer comme lu</button>
+      </div>
+      ${list.map(n=>{
+        const forUser = findUser(n.forEmail);
+        return `<div class="notif-item ${n.read?'read':''}">
+          <div class="notif-dot"></div>
+          <div style="flex:1;">
+            <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;">Pour : ${forUser? esc(forUser.prenom+' '+forUser.nom) : esc(n.forEmail)}</div>
+            <div>${esc(n.text)}</div>
+            <span style="font-size:11px;color:var(--ink-soft);">${new Date(n.ts).toLocaleString('fr-FR')}</span>
+          </div>
+        </div>`;
+      }).join('') || '<p style="color:var(--ink-soft);">Aucune notification.</p>'}
+    </div>`;
+}
+async function markAllNotificationsRead(){
+  DB.notifications.forEach(n=>n.read=true);
+  await saveKey('notifications');
+  toast("Toutes les notifications marquées comme lues.");
+  renderAdminNotifications();
 }
 
 /* ============================================================
@@ -1103,7 +1141,7 @@ function renderShowcase(){
   const sponsors = DB.users.filter(u=>u.role==='parrain' && u.status==='actif').slice(0,3);
   const sponsees = DB.users.filter(u=>u.role==='filleul' && u.status==='actif').slice(0,3);
   const demo = (list, roleLabel, domains) => (list.length? list : domains.map((d,i)=>({prenom:'Étudiant',nom:(i+1)+'',domaine:d,niveau:['Licence 3','Master 1','Master 2'][i]})))
-    .map(u=>`<div class="people-card reveal"><div class="avatar">${initials((u.prenom||'')+' '+(u.nom||''))}</div><h4>${u.prenom} ${u.nom}</h4><span>${u.niveau||''}</span><br><span class="tag">${u.domaine||roleLabel}</span></div>`).join('');
+    .map(u=>`<div class="people-card reveal"><div class="avatar">${initials((u.prenom||'')+' '+(u.nom||''))}</div><h4>${esc(u.prenom)} ${esc(u.nom)}</h4><span>${esc(u.niveau||'')}</span><br><span class="tag">${esc(u.domaine||roleLabel)}</span></div>`).join('');
   const sponsorEl = document.getElementById('sponsorShowcase');
   const sponseeEl = document.getElementById('sponseeShowcase');
   if(sponsorEl) sponsorEl.innerHTML = demo(sponsors,'Parrain',['Agronomie','Nutrition','Agroalimentaire']);
