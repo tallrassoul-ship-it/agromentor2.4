@@ -60,7 +60,7 @@ async function saveDB(key) {
           DB[key] = finalList;
         }
       }
-    } catch (e) { /* premier envoi */ }
+    } catch (e) { console.warn("Lecture cloud échouée pour", key, e); }
     await window.storage.set('am_' + key, JSON.stringify(finalList), true);
     LAST_SYNCED[key] = new Set(finalList.map(recordId).filter(Boolean));
   } catch (e) { console.error("Erreur sauvegarde:", key, e); }
@@ -216,9 +216,14 @@ if(faqListEl){
 }
 function toggleFaq(i){ document.getElementById('faq'+i)?.classList.toggle('open'); }
 
-function submitContact(e){
+async function submitContact(e){
   e.preventDefault();
-  toast("Merci ! Nous revenons vers vous rapidement.","Message envoyé");
+  const name = document.getElementById('cName').value.trim();
+  const email = document.getElementById('cEmail').value.trim();
+  const subject = document.getElementById('cSubject').value;
+  const msg = document.getElementById('cMsg').value.trim();
+  await notify(ADMIN_EMAIL, `📩 Message de contact — ${name} (${email}) — Sujet : ${subject} — ${msg}`);
+  toast("Merci ! Votre message a été transmis à l'administration.","Message envoyé");
   e.target.reset();
   return false;
 }
@@ -402,7 +407,7 @@ function renderRegStep(){
         <div class="field"><label>Nom</label><input id="rNom" value="${escAttr(regData.nom||'')}"></div>
         <div class="field"><label>Prénom</label><input id="rPrenom" value="${escAttr(regData.prenom||'')}"></div>
         <div class="field"><label>Date de naissance</label><input type="date" id="rDob" value="${escAttr(regData.dob||'')}"></div>
-        <div class="field"><label>Sexe</label><select id="rSexe"><option ${regData.sexe==='F'?'selected':''}>Féminin</option><option ${regData.sexe==='M'?'selected':''}>Masculin</option></select></div>
+        <div class="field"><label>Sexe</label><select id="rSexe"><option value="F" ${regData.sexe==='F'?'selected':''}>Féminin</option><option value="M" ${regData.sexe==='M'?'selected':''}>Masculin</option></select></div>
         <div class="field"><label>Ville d'origine</label><input id="rVille" value="${escAttr(regData.ville||'')}"></div>
         <div class="field"><label>Niveau d'étude</label><select id="rNiveau">
           ${['Licence 1','Licence 2','Licence 3','Master 1','Master 2'].map(n=>`<option ${regData.niveau===n?'selected':''}>${n}</option>`).join('')}
@@ -842,27 +847,27 @@ async function toggleLike(id){
   r.likes = r.likes||[];
   const i=r.likes.indexOf(u.email);
   if(i>-1) r.likes.splice(i,1); else r.likes.push(u.email);
-  await saveKey('resources'); renderResources();
+  await saveKey('resources'); originalGoto(currentView);
 }
 async function downloadResource(id){
   const r=DB.resources.find(x=>x.id===id);
   r.downloads=(r.downloads||0)+1;
   await saveKey('resources');
   toast(r.link? "Téléchargement simulé — "+r.link : "Téléchargement simulé.");
-  renderResources();
+  originalGoto(currentView);
 }
 async function toggleSave(id){
   const u=me(); u.saved=u.saved||[];
   const i=u.saved.indexOf(id);
   if(i>-1) u.saved.splice(i,1); else u.saved.push(id);
-  await saveKey('users'); renderResources();
+  await saveKey('users'); originalGoto(currentView);
 }
 async function addComment(id){
   const input=document.getElementById('cin-'+id); const text=input.value.trim();
   if(!text) return;
   const r=DB.resources.find(x=>x.id===id); const u=me();
   r.comments=r.comments||[]; r.comments.push({author:u.prenom+' '+u.nom, authorEmail:u.email, text});
-  await saveKey('resources'); renderResources();
+  await saveKey('resources'); originalGoto(currentView);
 }
 function renderSaved(){
   const u=me();
@@ -899,7 +904,7 @@ function renderMessages(){
   renderChatMsgs();
 }
 function openChat(email){ currentChatWith=email; renderMessages(); }
-function renderChatMsgs(){
+async function renderChatMsgs(){
   const u=me(); const box=document.getElementById('chatMsgs'); if(!box) return;
   if(!currentChatWith){ box.innerHTML='<p style="color:var(--ink-soft);">Sélectionnez une conversation.</p>'; return; }
   const list = DB.messages.filter(m=> (m.from===u.email&&m.to===currentChatWith)||(m.from===currentChatWith&&m.to===u.email));
@@ -907,7 +912,7 @@ function renderChatMsgs(){
   list.forEach(m=>{ if(m.to===u.email) m.read=true; });
   box.innerHTML = list.map(m=>`<div class="msg ${m.from===u.email?'me':'them'}">${esc(m.text)}<span class="msg-time">${new Date(m.ts).toLocaleString('fr-FR')}</span></div>`).join('') || '<p style="color:var(--ink-soft);">Aucun message. Dites bonjour !</p>';
   box.scrollTop = box.scrollHeight;
-  if(hadUnread) saveKey('messages');
+  if(hadUnread) await saveKey('messages').catch(e=>console.error("Erreur sauvegarde messages:",e));
 }
 async function sendMsg(){
   const u=me(); const input=document.getElementById('chatInput'); const text=input.value.trim();
@@ -1059,16 +1064,16 @@ async function createBinomeManual(){
   const filleulEmail=document.getElementById('manFilleul').value;
   if(!parrainEmail||!filleulEmail){ toast("Sélectionnez un parrain et un filleul."); return; }
   if(parrainEmail===filleulEmail){ toast("Le parrain et le filleul ne peuvent pas être la même personne."); return; }
-  // Vérifier qu'ils ne sont pas déjà dans un binôme actif
-  const parrainBusy = DB.binomes.some(b=>b.parrainEmail===parrainEmail && b.status==='validé');
-  const filleulBusy = DB.binomes.some(b=>b.filleulEmail===filleulEmail && b.status==='validé');
+  // Vérifier qu'ils ne sont pas déjà dans un binôme actif ou proposé
+  const parrainBusy = DB.binomes.some(b=>b.parrainEmail===parrainEmail && b.status!=='refusé');
+  const filleulBusy = DB.binomes.some(b=>b.filleulEmail===filleulEmail && b.status!=='refusé');
   if(parrainBusy){ const p=findUser(parrainEmail); toast(`${p?.prenom} ${p?.nom} est déjà dans un binôme actif.`); return; }
   if(filleulBusy){ const f=findUser(filleulEmail); toast(`${f?.prenom} ${f?.nom} est déjà dans un binôme actif.`); return; }
   DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat:100, createdAt:Date.now(), manual:true});
   await saveKey('binomes');
   await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur.");
   await notify(filleulEmail,"Un binôme a été créé manuellement par l'administrateur.");
-  toast("Binôme créé et validé."); renderBinomeTable();
+  toast("Binôme créé et validé."); renderAdminBinomes();
 }
 async function setBinomeStatus(id,status){
   const b=DB.binomes.find(x=>x.id===id); b.status=status;
@@ -1085,6 +1090,10 @@ async function modifyBinome(id){
   const newFilleul = prompt("Nouvel e-mail du filleul :\n"+candidates, b.filleulEmail);
   if(!newFilleul) return;
   if(!findUser(newFilleul)){ toast("Utilisateur introuvable."); return; }
+  if(newFilleul !== b.filleulEmail){
+    const filleulBusy = DB.binomes.some(x=>x.id!==id && x.filleulEmail===newFilleul && x.status!=='refusé');
+    if(filleulBusy){ const f=findUser(newFilleul); toast(`${f?.prenom} ${f?.nom} est déjà dans un autre binôme actif.`); return; }
+  }
   b.filleulEmail=newFilleul; b.status='proposé';
   await saveKey('binomes'); toast("Binôme modifié, en attente de re-validation.");
   renderBinomeTable();
