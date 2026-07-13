@@ -444,7 +444,7 @@ tr:hover{background:rgba(47,107,69,.03);}
   .nav-actions-desktop{display:none !important;}
   .hamburger{display:block;}
   .app-shell{flex-direction:column;}
-  .sidebar{width:100%;flex-direction:row;overflow:auto;align-items:center;height:auto;position:relative;position:sticky;top:0;}
+  .sidebar{width:100%;flex-direction:row;overflow:auto;align-items:center;height:auto;position:sticky;top:0;}
   .sidebar .logo{margin:0 10px 0 0;}
   .side-bottom{margin-top:0;}
   .chat-wrap{grid-template-columns:1fr;height:auto;}
