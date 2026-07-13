@@ -677,13 +677,40 @@ async function deleteMyAccount(){
   logout();
 }
 async function removeUserCascade(email){
+  // 1. Supprimer l'utilisateur
   DB.users = DB.users.filter(u=>u.email!==email);
+
+  // 2. Supprimer ses binômes
   DB.binomes = DB.binomes.filter(b=>{
-    const involved = b.parrainEmail===email||b.filleulEmail===email;
-    return !involved;
+    return b.parrainEmail!==email && b.filleulEmail!==email;
   });
-  DB.resources.forEach(r=>{ r.likes=(r.likes||[]).filter(l=>l!==email); });
-  await saveKey('users'); await saveKey('binomes'); await saveKey('resources');
+
+  // 3. Supprimer ses ressources
+  DB.resources = DB.resources.filter(r=>r.author!==email);
+
+  // 4. Nettoyer ses likes et ses commentaires dans les ressources restantes
+  DB.resources.forEach(r=>{
+    r.likes = (r.likes||[]).filter(l=>l!==email);
+    r.comments = (r.comments||[]).filter(c=>c.authorEmail!==email);
+  });
+
+  // 5. Supprimer ses messages
+  DB.messages = DB.messages.filter(m=>m.from!==email && m.to!==email);
+
+  // 6. Supprimer ses notifications
+  DB.notifications = DB.notifications.filter(n=>n.forEmail!==email);
+
+  // 7. Le retirer des listes saved des autres utilisateurs
+  DB.users.forEach(u=>{
+    if(u.saved) u.saved = u.saved.filter(id=>!DB.resources.find(r=>r.id===id));
+  });
+
+  // 8. Sauvegarder toutes les collections modifiées
+  await saveKey('users');
+  await saveKey('binomes');
+  await saveKey('resources');
+  await saveKey('messages');
+  await saveKey('notifications');
 }
 
 /* ---------- USER: resources ---------- */
@@ -912,10 +939,17 @@ function editUserPrompt(email){
   saveKey('users').then(()=>{ toast("Utilisateur modifié."); filterUsers(); });
 }
 async function adminDeleteUser(email){
-  if(!confirm("Supprimer définitivement cet utilisateur ? Ses binômes seront annulés.")) return;
-  await removeUserCascade(email);
-  toast("Utilisateur supprimé, associations annulées.");
-  filterUsers();
+  const user = findUser(email);
+  if(!user){ toast("Utilisateur introuvable."); return; }
+  if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses ressources seront supprimées\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
+  try{
+    await removeUserCascade(email);
+    toast(`${user.prenom} ${user.nom} a été supprimé(e) avec toutes ses données.`, "Suppression réussie");
+    filterUsers();
+  }catch(e){
+    console.error("Erreur suppression:", e);
+    toast("Erreur lors de la suppression. Réessayez.", "Erreur");
+  }
 }
 function renderAdminBinomes(){
   document.getElementById('appContent').innerHTML = `
