@@ -88,7 +88,14 @@ function toast(msg, title){
   if(!wrap) return;
   const t = document.createElement('div');
   t.className = 'toast';
-  t.innerHTML = `${title ? '<b>'+title+'</b> ' : ''}${msg}`;
+  // Utiliser textContent pour éviter toute injection HTML
+  if(title){
+    const b = document.createElement('b');
+    b.textContent = title;
+    t.appendChild(b);
+    t.appendChild(document.createTextNode(' '));
+  }
+  t.appendChild(document.createTextNode(msg));
   wrap.appendChild(t);
   setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(30px)'; t.style.transition='.3s'; setTimeout(()=>t.remove(), 300); }, 3500);
 }
@@ -725,7 +732,7 @@ async function removeUserCascade(email){
   // 4. Nettoyer ses likes et ses commentaires dans les ressources restantes
   DB.resources.forEach(r=>{
     r.likes = (r.likes||[]).filter(l=>l!==email);
-    r.comments = (r.comments||[]).filter(c=>c.authorEmail!==email);
+    r.comments = (r.comments||[]).filter(c=>(c.authorEmail||'').toLowerCase()!==email.toLowerCase() && !(c.author||'').includes(email));
   });
 
   // 5. Supprimer ses messages
@@ -886,14 +893,14 @@ async function sendMsg(){
 }
 
 /* ---------- USER: notifications ---------- */
-function renderNotifications(){
+async function renderNotifications(){
   const u=me();
-  const list = DB.notifications.filter(n=>n.forEmail===u.email).sort((a,b)=>b.ts-a.ts);
+  const list = [...DB.notifications.filter(n=>n.forEmail===u.email)].sort((a,b)=>b.ts-a.ts);
   document.getElementById('appContent').innerHTML = `<div class="panel"><h3>Notifications</h3>
-    ${list.map(n=>`<div class="notif-item ${n.read?'read':''}"><div class="notif-dot"></div><div>${n.text}<br><span style="font-size:11px;color:var(--ink-soft);">${new Date(n.ts).toLocaleString('fr-FR')}</span></div></div>`).join('') || '<p style="color:var(--ink-soft);">Aucune notification.</p>'}
+    ${list.map(n=>`<div class="notif-item ${n.read?'read':''}"><div class="notif-dot"></div><div>${esc(n.text)}<br><span style="font-size:11px;color:var(--ink-soft);">${new Date(n.ts).toLocaleString('fr-FR')}</span></div></div>`).join('') || '<p style="color:var(--ink-soft);">Aucune notification.</p>'}
     </div>`;
   list.forEach(n=>n.read=true);
-  saveKey('notifications');
+  await saveKey('notifications');
 }
 
 /* ============================================================
@@ -1096,7 +1103,7 @@ async function deleteComment(id,idx){
 
 /* ---------- ADMIN: notifications ---------- */
 function renderAdminNotifications(){
-  const list = DB.notifications.sort((a,b)=>b.ts-a.ts);
+  const list = [...DB.notifications].sort((a,b)=>b.ts-a.ts);
   const unread = list.filter(n=>!n.read).length;
   document.getElementById('appContent').innerHTML = `
     <div class="panel">
@@ -1158,9 +1165,9 @@ async function syncOnlineData() {
     toast("Mise à jour des données depuis le Cloud...","Synchronisation");
     await loadDB();
     toast("Données synchronisées avec succès !","Terminé");
-    // Re-render current view
+    // Re-render current view (stay on same page)
     const u = me();
-    if(u) goto(u.role==='admin'?'admin-overview':'dashboard');
+    if(u) originalGoto(currentView);
   } catch (error) {
     console.error("Erreur de synchronisation :", error);
     toast("Impossible de synchroniser les données.","Erreur");
