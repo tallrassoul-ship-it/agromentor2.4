@@ -35,12 +35,28 @@ async function saveDB(key) {
         const cloudList = JSON.parse(r.value);
         if (Array.isArray(cloudList) && Array.isArray(DB[key])) {
           const known = LAST_SYNCED[key] || new Set();
+          const cloudIds = new Set(cloudList.map(recordId).filter(Boolean));
           const localIds = new Set(DB[key].map(recordId).filter(Boolean));
+
+          // Éléments ajoutés ailleurs entre-temps : présents dans le cloud,
+          // inconnus et absents localement -> à récupérer.
           const addedByOthers = cloudList.filter(cloudItem => {
             const id = recordId(cloudItem);
             return id && !known.has(id) && !localIds.has(id);
           });
-          finalList = [...DB[key], ...addedByOthers];
+
+          // Éléments supprimés ailleurs entre-temps : connus lors du dernier
+          // sync mais absents du cloud maintenant -> ne pas les faire
+          // réapparaître même s'ils traînent encore dans notre copie locale.
+          const removedByOthers = new Set(
+            [...known].filter(id => !cloudIds.has(id))
+          );
+          const survivingLocal = DB[key].filter(item => {
+            const id = recordId(item);
+            return !(id && removedByOthers.has(id));
+          });
+
+          finalList = [...survivingLocal, ...addedByOthers];
           DB[key] = finalList;
         }
       }
@@ -363,7 +379,7 @@ async function doLogin(e){
   }
   const u = findUser(email);
   if(!u){ toast("E-mail ou mot de passe incorrect."); return false; }
-  if((await sha256(pass)) !== u.passwordHash && pass !== u.password){ toast("E-mail ou mot de passe incorrect."); return false; }
+  if((await sha256(pass)) !== u.passwordHash){ toast("E-mail ou mot de passe incorrect."); return false; }
   if(u.status==='désactivé'){ toast("Ce compte a été désactivé par l'administrateur."); return false; }
   SESSION=email; await saveSession();
   closeAuth(); enterApp();
@@ -504,7 +520,7 @@ function regNext(step){
 async function finishRegister(){
   const passwordHash = await sha256(regData.password);
   const user = {
-    email:regData.email, password:regData.password, passwordHash, nom:regData.nom, prenom:regData.prenom,
+    email:regData.email, passwordHash, nom:regData.nom, prenom:regData.prenom,
     dob:regData.dob, sexe:regData.sexe, ville:regData.ville, niveau:regData.niveau, tel:regData.tel,
     role:regData.role, status:'actif',
     interests:regData.interests, activities:regData.activities, competences:regData.competences,
@@ -681,6 +697,8 @@ function renderProfile(){
     <div class="panel">
       <h3>Sécurité</h3>
       <div class="form-grid">
+        <div class="field"><label>Mot de passe actuel</label><input type="password" id="pPassCurrent"></div>
+        <div class="field"></div>
         <div class="field"><label>Nouveau mot de passe</label><input type="password" id="pPass1"></div>
         <div class="field"><label>Confirmation</label><input type="password" id="pPass2"></div>
       </div>
@@ -705,10 +723,16 @@ async function saveProfile(){
   renderSidebar('user');
 }
 async function changePassword(){
+  const current=document.getElementById('pPassCurrent').value;
   const p1=document.getElementById('pPass1').value, p2=document.getElementById('pPass2').value;
+  const u=me();
+  if((await sha256(current)) !== u.passwordHash){ toast("Mot de passe actuel incorrect."); return; }
   if(!p1||p1!==p2){ toast("Les mots de passe ne correspondent pas."); return; }
   if(p1.length < 6){ toast("Le mot de passe doit contenir au moins 6 caractères."); return; }
-  const u=me(); u.password=p1; u.passwordHash=await sha256(p1); await saveKey('users');
+  u.passwordHash=await sha256(p1); await saveKey('users');
+  document.getElementById('pPassCurrent').value='';
+  document.getElementById('pPass1').value='';
+  document.getElementById('pPass2').value='';
   toast("Mot de passe changé avec succès.");
 }
 async function deleteMyAccount(){
@@ -879,9 +903,11 @@ function renderChatMsgs(){
   const u=me(); const box=document.getElementById('chatMsgs'); if(!box) return;
   if(!currentChatWith){ box.innerHTML='<p style="color:var(--ink-soft);">Sélectionnez une conversation.</p>'; return; }
   const list = DB.messages.filter(m=> (m.from===u.email&&m.to===currentChatWith)||(m.from===currentChatWith&&m.to===u.email));
+  const hadUnread = list.some(m=>m.to===u.email && !m.read);
   list.forEach(m=>{ if(m.to===u.email) m.read=true; });
   box.innerHTML = list.map(m=>`<div class="msg ${m.from===u.email?'me':'them'}">${esc(m.text)}<span class="msg-time">${new Date(m.ts).toLocaleString('fr-FR')}</span></div>`).join('') || '<p style="color:var(--ink-soft);">Aucun message. Dites bonjour !</p>';
   box.scrollTop = box.scrollHeight;
+  if(hadUnread) saveKey('messages');
 }
 async function sendMsg(){
   const u=me(); const input=document.getElementById('chatInput'); const text=input.value.trim();
@@ -1181,6 +1207,10 @@ goto = function(view){ currentView = view; originalGoto(view); };
 
 setInterval(async () => {
   if(!SESSION) return;
+  // Ne pas interrompre une saisie en cours (formulaire, chat, etc.)
+  const active = document.activeElement;
+  const isEditing = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
+  if(isEditing) return;
   await loadDB();
   // Re-render current view silencieusement
   const u = me();
