@@ -52,6 +52,7 @@ async function saveDB(key) {
 
 /* ---------- storage helpers ---------- */
 async function loadDB(){
+  const savedSession = SESSION; // Préserver la session en cours
   for(const key of Object.keys(DB)){
     try{
       const r = await window.storage.get('am_'+key, true);
@@ -59,23 +60,50 @@ async function loadDB(){
     }catch(e){ DB[key] = []; }
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
-  // On ne restaure PLUS la session automatiquement —
-  // l'utilisateur doit se reconnecter à chaque visite.
-  SESSION = null;
+  // Restaurer la session si elle était active
+  if(!savedSession){
+    try{
+      const s = await window.storage.get('am_session', false);
+      if(s && s.value) SESSION = JSON.parse(s.value).email;
+    }catch(e){ SESSION = null; }
+  } else {
+    SESSION = savedSession;
+  }
 }
 
 async function saveKey(key){
   try{ await saveDB(key); }catch(e){ toast("Erreur de sauvegarde des données."); }
 }
-// Session stockée uniquement en mémoire (perdue au rechargement)
+// Session persistée pour permettre le refresh sans déconnexion
 async function saveSession(){
-  // Aucune persistance — la session vit uniquement durant la page courante
+  try{
+    if(SESSION) await window.storage.set('am_session', JSON.stringify({email:SESSION}), false);
+    else await window.storage.delete('am_session', false);
+  }catch(e){}
 }
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function findUser(email){ return DB.users.find(u=>u.email===email); }
 function me(){ return findUser(SESSION); }
 function initials(name){ return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+
+/* ---------- Toast (was missing!) ---------- */
+function toast(msg, title){
+  const wrap = document.getElementById('toast-wrap');
+  if(!wrap) return;
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `${title ? '<b>'+title+'</b> ' : ''}${msg}`;
+  wrap.appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(30px)'; t.style.transition='.3s'; setTimeout(()=>t.remove(), 300); }, 3500);
+}
+
+/* ---------- XSS sanitizer ---------- */
+function esc(str){
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
 
 /* ---------- notifications ---------- */
 async function notify(email, text){
@@ -327,7 +355,8 @@ async function doLogin(e){
     closeAuth(); enterApp(); return false;
   }
   const u = findUser(email);
-  if(!u || u.password!==pass){ toast("E-mail ou mot de passe incorrect."); return false; }
+  if(!u){ toast("E-mail ou mot de passe incorrect."); return false; }
+  if((await sha256(pass)) !== u.passwordHash && pass !== u.password){ toast("E-mail ou mot de passe incorrect."); return false; }
   if(u.status==='désactivé'){ toast("Ce compte a été désactivé par l'administrateur."); return false; }
   SESSION=email; await saveSession();
   closeAuth(); enterApp();
@@ -466,8 +495,9 @@ function regNext(step){
   document.querySelector('.step-track').innerHTML = ['Identité','Compte','Questionnaire','Confirmation'].map((s,i)=>`<div class="${i<=regStep?'done':''}"></div>`).join('');
 }
 async function finishRegister(){
+  const passwordHash = await sha256(regData.password);
   const user = {
-    email:regData.email, password:regData.password, nom:regData.nom, prenom:regData.prenom,
+    email:regData.email, password:regData.password, passwordHash, nom:regData.nom, prenom:regData.prenom,
     dob:regData.dob, sexe:regData.sexe, ville:regData.ville, niveau:regData.niveau, tel:regData.tel,
     role:regData.role, status:'actif',
     interests:regData.interests, activities:regData.activities, competences:regData.competences,
@@ -667,7 +697,7 @@ async function changePassword(){
   const p1=document.getElementById('pPass1').value, p2=document.getElementById('pPass2').value;
   if(!p1||p1!==p2){ toast("Les mots de passe ne correspondent pas."); return; }
   if(p1.length < 6){ toast("Le mot de passe doit contenir au moins 6 caractères."); return; }
-  me().password=p1; await saveKey('users');
+  const u=me(); u.password=p1; u.passwordHash=await sha256(p1); await saveKey('users');
   toast("Mot de passe changé avec succès.");
 }
 async function deleteMyAccount(){
@@ -741,10 +771,10 @@ function renderResourceList(targetId, list){
     const saved = (u.saved||[]).includes(r.id);
     return `<div class="res-card" id="rc-${r.id}">
       <div class="res-top">
-        <div><span class="res-type">${r.type}</span><h4 style="margin:4px 0;color:var(--forest);">${r.title}</h4>
-        <span style="font-size:12px;color:var(--ink-soft);">par ${author? author.prenom+' '+author.nom : 'Utilisateur'} · ${new Date(r.createdAt).toLocaleDateString('fr-FR')}</span></div>
+        <div><span class="res-type">${esc(r.type)}</span><h4 style="margin:4px 0;color:var(--forest);">${esc(r.title)}</h4>
+        <span style="font-size:12px;color:var(--ink-soft);">par ${author? esc(author.prenom+' '+author.nom) : 'Utilisateur'} · ${new Date(r.createdAt).toLocaleDateString('fr-FR')}</span></div>
       </div>
-      <p style="font-size:13.5px;color:var(--ink-soft);word-break:break-all;">${r.link||''}</p>
+      <p style="font-size:13.5px;color:var(--ink-soft);word-break:break-all;">${esc(r.link||'')}</p>
       <div class="res-actions">
         <button class="${liked?'liked':''}" onclick="toggleLike('${r.id}')">👍 ${(r.likes||[]).length}</button>
         <button onclick="downloadResource('${r.id}')">⬇️ Télécharger (${r.downloads||0})</button>
@@ -752,7 +782,7 @@ function renderResourceList(targetId, list){
         <button onclick="shareResource('${r.id}')">↗️ Repartager (${r.shares||0})</button>
       </div>
       <div class="comment-box">
-        ${(r.comments||[]).map(c=>`<div class="comment-line"><b>${c.author}:</b> ${c.text}</div>`).join('')}
+        ${(r.comments||[]).map(c=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)}</div>`).join('')}
         <div style="display:flex;gap:8px;margin-top:8px;">
           <input placeholder="Ajouter un commentaire..." id="cin-${r.id}" style="flex:1;" onkeydown="if(event.key==='Enter')addComment('${r.id}')">
           <button class="btn btn-sm btn-outline" onclick="addComment('${r.id}')">Envoyer</button>
@@ -796,7 +826,7 @@ async function addComment(id){
   const input=document.getElementById('cin-'+id); const text=input.value.trim();
   if(!text) return;
   const r=DB.resources.find(x=>x.id===id); const u=me();
-  r.comments=r.comments||[]; r.comments.push({author:u.prenom+' '+u.nom,text});
+  r.comments=r.comments||[]; r.comments.push({author:u.prenom+' '+u.nom, authorEmail:u.email, text});
   await saveKey('resources'); renderResources();
 }
 function renderSaved(){
@@ -839,7 +869,7 @@ function renderChatMsgs(){
   if(!currentChatWith){ box.innerHTML='<p style="color:var(--ink-soft);">Sélectionnez une conversation.</p>'; return; }
   const list = DB.messages.filter(m=> (m.from===u.email&&m.to===currentChatWith)||(m.from===currentChatWith&&m.to===u.email));
   list.forEach(m=>{ if(m.to===u.email) m.read=true; });
-  box.innerHTML = list.map(m=>`<div class="msg ${m.from===u.email?'me':'them'}">${m.text}<span class="msg-time">${new Date(m.ts).toLocaleString('fr-FR')}</span></div>`).join('') || '<p style="color:var(--ink-soft);">Aucun message. Dites bonjour !</p>';
+  box.innerHTML = list.map(m=>`<div class="msg ${m.from===u.email?'me':'them'}">${esc(m.text)}<span class="msg-time">${new Date(m.ts).toLocaleString('fr-FR')}</span></div>`).join('') || '<p style="color:var(--ink-soft);">Aucun message. Dites bonjour !</p>';
   box.scrollTop = box.scrollHeight;
 }
 async function sendMsg(){
@@ -991,6 +1021,12 @@ async function createBinomeManual(){
   const parrainEmail=document.getElementById('manParrain').value;
   const filleulEmail=document.getElementById('manFilleul').value;
   if(!parrainEmail||!filleulEmail){ toast("Sélectionnez un parrain et un filleul."); return; }
+  if(parrainEmail===filleulEmail){ toast("Le parrain et le filleul ne peuvent pas être la même personne."); return; }
+  // Vérifier qu'ils ne sont pas déjà dans un binôme actif
+  const parrainBusy = DB.binomes.some(b=>b.parrainEmail===parrainEmail && b.status==='validé');
+  const filleulBusy = DB.binomes.some(b=>b.filleulEmail===filleulEmail && b.status==='validé');
+  if(parrainBusy){ const p=findUser(parrainEmail); toast(`${p?.prenom} ${p?.nom} est déjà dans un binôme actif.`); return; }
+  if(filleulBusy){ const f=findUser(filleulEmail); toast(`${f?.prenom} ${f?.nom} est déjà dans un binôme actif.`); return; }
   DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat:100, createdAt:Date.now(), manual:true});
   await saveKey('binomes');
   await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur.");
@@ -1102,7 +1138,6 @@ setInterval(() => {
    ============================================================ */
 (async function init(){
   await loadDB();
-  // SESSION est toujours null au chargement → on reste sur la page publique
   const actifs = DB.binomes.filter(b=>b.status==='validé').length;
   const statBinomesEl = document.getElementById('statBinomes');
   const statBinomesBadgeEl = document.getElementById('statBinomesBadge');
@@ -1113,5 +1148,9 @@ setInterval(() => {
   if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
   if(statResourcesEl) animateCounter(statResourcesEl, DB.resources.length);
   renderShowcase();
-  // Plus de redirection auto — l'utilisateur doit se connecter manuellement
+  // Si une session existe et l'utilisateur est valide, on entre dans l'app
+  if(SESSION && findUser(SESSION)){
+    enterApp();
+    handleDeepLink();
+  }
 })();
