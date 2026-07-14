@@ -526,6 +526,7 @@ function regNext(step){
     regData.password=document.getElementById('rPass').value;
     const p2=document.getElementById('rPass2').value;
     if(!regData.email||!regData.password){ toast("E-mail et mot de passe requis."); return; }
+    if(regData.email===ADMIN_EMAIL){ toast("Cette adresse e-mail est réservée à l'administration."); return; }
     if(!regData.email.endsWith('@uam.edu.sn')){ toast("Utilisez votre adresse universitaire, terminant par @uam.edu.sn."); return; }
     if(regData.password!==p2){ toast("Les mots de passe ne correspondent pas."); return; }
     if(regData.password.length < 6){ toast("Le mot de passe doit contenir au moins 6 caractères."); return; }
@@ -598,8 +599,11 @@ function enterApp(){
   document.getElementById('view-site').classList.remove('active');
   document.getElementById('view-app').classList.add('active');
   const u = me();
-  renderSidebar(u.role==='admin'?'admin':'user');
-  goto(u.role==='admin'?'admin-overview':'dashboard');
+  // Source de vérité : l'email, pas le champ role (qui peut être corrompu)
+  const isAdmin = u.email === ADMIN_EMAIL || u.role === 'admin';
+  if(isAdmin && u.role!=='admin'){ u.role = 'admin'; saveKey('users'); }
+  renderSidebar(isAdmin?'admin':'user');
+  goto(isAdmin?'admin-overview':'dashboard');
 }
 async function logout(){
   SESSION=null;
@@ -782,7 +786,10 @@ async function removeUserCascade(email){
   // 4. Nettoyer ses likes et ses commentaires dans les ressources restantes
   DB.resources.forEach(r=>{
     r.likes = (r.likes||[]).filter(l=>l!==email);
-    r.comments = (r.comments||[]).filter(c=>(c.authorEmail||'').toLowerCase()!==email.toLowerCase() && !(c.author||'').includes(email));
+    r.comments = (r.comments||[]).filter(c=>{
+      const authorEmail = (c.authorEmail||'').toLowerCase();
+      return authorEmail !== email.toLowerCase();
+    });
   });
 
   // 5. Supprimer ses messages
@@ -966,7 +973,7 @@ function renderAdminOverview(){
   const visibleRes = DB.resources.filter(r=>!r.hidden);
   const nbRes = visibleRes.length;
   const nbDl = visibleRes.reduce((s,r)=>s+(r.downloads||0),0);
-  const activeUsers = DB.users.filter(u=>u.status==='actif').length;
+  const activeUsers = DB.users.filter(u=>u.status==='actif' && u.role!=='admin').length;
   const newSignups = DB.users.filter(u=>u.createdAt && (Date.now()-u.createdAt)<7*86400000).length;
 
   // Update public stats
@@ -1021,12 +1028,15 @@ function filterUsers(){
     </tr>`).join('')}`;
 }
 async function toggleUserStatus(email,status){
-  findUser(email).status=status; await saveKey('users');
+  const u = findUser(email);
+  if(!u){ toast("Utilisateur introuvable (peut-être supprimé)."); filterUsers(); return; }
+  u.status=status; await saveKey('users');
   await notify(email, status==='actif'? "Votre compte a été réactivé par l'administrateur." : "Votre compte a été désactivé par l'administrateur.");
   filterUsers();
 }
 function editUserPrompt(email){
   const u=findUser(email);
+  if(!u){ toast("Utilisateur introuvable (peut-être supprimé)."); filterUsers(); return; }
   const nom=prompt("Nom :", u.nom); if(nom===null) return;
   const prenom=prompt("Prénom :", u.prenom); if(prenom===null) return;
   u.nom=nom; u.prenom=prenom;
@@ -1182,9 +1192,10 @@ function renderAdminNotifications(){
     </div>`;
 }
 async function markAllNotificationsRead(){
-  DB.notifications.forEach(n=>n.read=true);
+  // Ne marquer que les notifications destinées à l'admin (utilisateur actuel)
+  DB.notifications.forEach(n=>{ if(n.forEmail===ADMIN_EMAIL) n.read=true; });
   await saveKey('notifications');
-  toast("Toutes les notifications marquées comme lues.");
+  toast("Toutes vos notifications marquées comme lues.");
   renderAdminNotifications();
 }
 
