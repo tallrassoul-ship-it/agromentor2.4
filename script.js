@@ -428,7 +428,7 @@ function renderRegStep(){
         <div class="field"><label>Nom</label><input id="rNom" value="${escAttr(regData.nom||'')}"></div>
         <div class="field"><label>Prénom</label><input id="rPrenom" value="${escAttr(regData.prenom||'')}"></div>
         <div class="field"><label>Date de naissance</label><input type="date" id="rDob" value="${escAttr(regData.dob||'')}"></div>
-        <div class="field"><label>Sexe</label><select id="rSexe"><option value="F" ${regData.sexe==='F'?'selected':''}>Féminin</option><option value="M" ${regData.sexe==='M'?'selected':''}>Masculin</option></select></div>
+        <div class="field"><label>Sexe</label><select id="rSexe"><option value="" ${!regData.sexe?'selected':''}>Sélectionnez...</option><option value="F" ${regData.sexe==='F'?'selected':''}>Féminin</option><option value="M" ${regData.sexe==='M'?'selected':''}>Masculin</option></select></div>
         <div class="field"><label>Ville d'origine</label><input id="rVille" value="${escAttr(regData.ville||'')}"></div>
         <div class="field"><label>Niveau d'étude</label><select id="rNiveau">
           ${['Licence 1','Licence 2','Licence 3','Master 1','Master 2'].map(n=>`<option ${regData.niveau===n?'selected':''}>${n}</option>`).join('')}
@@ -480,7 +480,7 @@ function renderRegStep(){
   } else {
     body.innerHTML = `
       <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.6;">
-        Merci ${regData.prenom||''} ! Votre profil est prêt. Après validation de votre compte, un binôme compatible
+        Merci ${esc(regData.prenom)||''} ! Votre profil est prêt. Après validation de votre compte, un binôme compatible
         vous sera proposé automatiquement, puis <b>validé par l'administrateur</b> avant toute activation.
       </p>
       <div class="modal-actions">
@@ -518,6 +518,7 @@ function regNext(step){
     regData.ville=document.getElementById('rVille').value.trim();
     regData.niveau=document.getElementById('rNiveau').value;
     if(!regData.nom||!regData.prenom){ toast("Merci de renseigner nom et prénom."); return; }
+    if(!regData.sexe){ toast("Merci de sélectionner votre sexe."); return; }
   }
   if(step===1){
     regData.role=document.getElementById('rRole').value;
@@ -1108,7 +1109,9 @@ async function createBinomeManual(){
   toast("Binôme créé et validé."); renderAdminBinomes();
 }
 async function setBinomeStatus(id,status){
-  const b=DB.binomes.find(x=>x.id===id); b.status=status;
+  const b=DB.binomes.find(x=>x.id===id);
+  if(!b){ toast("Binôme introuvable (peut-être supprimé)."); renderBinomeTable(); return; }
+  b.status=status;
   await saveKey('binomes');
   await notify(b.parrainEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
   await notify(b.filleulEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
@@ -1118,6 +1121,7 @@ async function setBinomeStatus(id,status){
 }
 async function modifyBinome(id){
   const b=DB.binomes.find(x=>x.id===id);
+  if(!b){ toast("Binôme introuvable (peut-être supprimé)."); renderBinomeTable(); return; }
   const candidates = DB.users.filter(u=>u.role==='filleul').map(u=>u.email+' — '+u.prenom+' '+u.nom).join('\n');
   const newFilleul = prompt("Nouvel e-mail du filleul :\n"+candidates, b.filleulEmail);
   if(!newFilleul) return;
@@ -1151,7 +1155,9 @@ function renderAdminResources(){
   }).join('') || '<p style="color:var(--ink-soft);">Aucune ressource.</p>';
 }
 async function toggleHideResource(id){
-  const r=DB.resources.find(x=>x.id===id); r.hidden=!r.hidden;
+  const r=DB.resources.find(x=>x.id===id);
+  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
+  r.hidden=!r.hidden;
   await saveKey('resources'); renderAdminResources();
 }
 async function deleteResource(id){
@@ -1164,7 +1170,9 @@ async function deleteResource(id){
   toast("Ressource supprimée."); renderAdminResources();
 }
 async function deleteComment(id,idx){
-  const r=DB.resources.find(x=>x.id===id); r.comments.splice(idx,1);
+  const r=DB.resources.find(x=>x.id===id);
+  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
+  r.comments.splice(idx,1);
   await saveKey('resources'); renderAdminResources();
 }
 
@@ -1272,7 +1280,7 @@ setInterval(async () => {
   if(statBinomesEl) animateCounter(statBinomesEl, actifs);
   if(statBinomesBadgeEl) animateCounter(statBinomesBadgeEl, actifs);
   if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
-  if(statResourcesEl) animateCounter(statResourcesEl, DB.resources.length);
+  if(statResourcesEl) animateCounter(statResourcesEl, DB.resources.filter(r=>!r.hidden).length);
   renderShowcase();
   // Si une session existe et l'utilisateur est valide, on entre dans l'app
   if(SESSION && findUser(SESSION)){
