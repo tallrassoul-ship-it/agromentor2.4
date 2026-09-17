@@ -21,8 +21,29 @@ const ACTIVITIES = [
 ];
 const CREDIT_HTML = 'Conçu avec ❤️ par <b>AgroMentor</b>';
 
+// Anti-doublon pour les actions admin
+let adminActionInProgress = false;
+async function withAdminLock(fn){
+  if(adminActionInProgress){
+    toast("Une action est déjà en cours, patientez...");
+    return;
+  }
+  adminActionInProgress = true;
+  try{
+    await fn();
+  } finally {
+    adminActionInProgress = false;
+  }
+}
+
 /* ---------- Amélioration de saveDB ---------- */
-function recordId(x){ return (x && (x.email || x.id)) || null; }
+function recordId(x){ 
+  if(!x) return null;
+  // Pour les notifications, utiliser l'id unique
+  if(x.forEmail && x.id) return x.id;
+  // Pour les autres entités, utiliser email ou id
+  return (x.email || x.id) || null; 
+}
 let LAST_SYNCED = {};
 
 async function saveDB(key) {
@@ -341,8 +362,14 @@ async function shareResource(id){
   const link = baseShareLink()+'#ressource-'+id;
   await copyLink(link);
   const r = DB.resources.find(x=>x.id===id);
-  if(r){ r.shares=(r.shares||0)+1; await saveKey('resources'); originalGoto(currentView); }
-  toast('Lien de la ressource copié.','Repartagé');
+  if(r){ 
+    r.shares=(r.shares||0)+1; 
+    await saveKey('resources'); 
+    preserveScroll(()=>originalGoto(currentView));
+    toast('Lien de la ressource copié.','Repartagé');
+  } else {
+    toast('Ressource introuvable (peut-être supprimée).');
+  }
 }
 
 /* ============================================================
@@ -553,6 +580,17 @@ function regNext(step){
     regData.niveau=document.getElementById('rNiveau').value;
     if(!regData.nom||!regData.prenom){ toast("Merci de renseigner nom et prénom."); return; }
     if(!regData.sexe){ toast("Merci de sélectionner votre sexe."); return; }
+    // Validation de la date de naissance
+    if(regData.dob){
+      const dobDate = new Date(regData.dob);
+      const today = new Date();
+      const age = today.getFullYear() - dobDate.getFullYear();
+      const m = today.getMonth() - dobDate.getMonth();
+      const actualAge = m < 0 || (m === 0 && today.getDate() < dobDate.getDate()) ? age - 1 : age;
+      if(actualAge < 15){ toast("Vous devez avoir au moins 15 ans pour vous inscrire."); return; }
+      if(actualAge > 100){ toast("Date de naissance invalide."); return; }
+      if(dobDate > today){ toast("La date de naissance ne peut pas être dans le futur."); return; }
+    }
   }
   if(step===1){
     regData.role=document.getElementById('rRole').value;
@@ -639,8 +677,10 @@ function enterApp(){
   if(isAdmin && u.role!=='admin'){ u.role = 'admin'; saveKey('users'); }
   renderSidebar(isAdmin?'admin':'user');
   goto(isAdmin?'admin-overview':'dashboard');
+  startAutoRefresh();
 }
 async function logout(){
+  stopAutoRefresh();
   SESSION=null;
   currentChatWith=null;
   await saveSession(); // Supprime la session du stockage
@@ -886,16 +926,16 @@ function renderResourceList(targetId, list){
       </div>
       <p style="font-size:13.5px;color:var(--ink-soft);word-break:break-all;">${esc(r.link||'')}</p>
       <div class="res-actions">
-        <button class="${liked?'liked':''}" onclick="toggleLike('${r.id}')">👍 ${(r.likes||[]).length}</button>
-        <button onclick="downloadResource('${r.id}')">⬇️ Télécharger (${r.downloads||0})</button>
-        <button class="${saved?'saved':''}" onclick="toggleSave('${r.id}')">${saved?'★ Enregistré':'☆ Enregistrer'}</button>
-        <button onclick="shareResource('${r.id}')">↗️ Repartager (${r.shares||0})</button>
+        <button class="${liked?'liked':''}" onclick="toggleLike('${escAttr(r.id)}')">👍 ${(r.likes||[]).length}</button>
+        <button onclick="downloadResource('${escAttr(r.id)}')">⬇️ Télécharger (${r.downloads||0})</button>
+        <button class="${saved?'saved':''}" onclick="toggleSave('${escAttr(r.id)}')">${saved?'★ Enregistré':'☆ Enregistrer'}</button>
+        <button onclick="shareResource('${escAttr(r.id)}')">↗️ Repartager (${r.shares||0})</button>
       </div>
       <div class="comment-box">
         ${(r.comments||[]).map(c=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)}</div>`).join('')}
         <div style="display:flex;gap:8px;margin-top:8px;">
-          <input placeholder="Ajouter un commentaire..." id="cin-${r.id}" style="flex:1;" onkeydown="if(event.key==='Enter')addComment('${r.id}')">
-          <button class="btn btn-sm btn-outline" onclick="addComment('${r.id}')">Envoyer</button>
+          <input placeholder="Ajouter un commentaire..." id="cin-${r.id}" style="flex:1;" onkeydown="if(event.key==='Enter')addComment('${escAttr(r.id)}')">
+          <button class="btn btn-sm btn-outline" onclick="addComment('${escAttr(r.id)}')">Envoyer</button>
         </div>
       </div>
     </div>`;
@@ -1078,20 +1118,22 @@ function filterUsers(){
       <td>${u.role==='parrain'?'Parrain':'Filleul'}</td>
       <td><span class="badge ${u.status==='actif'?'ok':'off'}">${u.status}</span></td>
       <td class="row-actions">
-        <button class="icon-btn" onclick="editUserPrompt('${u.email}')">Modifier</button>
+        <button class="icon-btn" onclick="editUserPrompt('${escAttr(u.email)}')">Modifier</button>
         ${u.status==='actif'
-          ? `<button class="icon-btn" onclick="toggleUserStatus('${u.email}','désactivé')">Désactiver</button>`
-          : `<button class="icon-btn" onclick="toggleUserStatus('${u.email}','actif')">Réactiver</button>`}
-        <button class="icon-btn" onclick="adminDeleteUser('${u.email}')">Supprimer</button>
+          ? `<button class="icon-btn" onclick="toggleUserStatus('${escAttr(u.email)}','désactivé')">Désactiver</button>`
+          : `<button class="icon-btn" onclick="toggleUserStatus('${escAttr(u.email)}','actif')">Réactiver</button>`}
+        <button class="icon-btn" onclick="adminDeleteUser('${escAttr(u.email)}')">Supprimer</button>
       </td>
     </tr>`).join('')}`;
 }
 async function toggleUserStatus(email,status){
-  const u = findUser(email);
-  if(!u){ toast("Utilisateur introuvable (peut-être supprimé)."); filterUsers(); return; }
-  u.status=status; await saveKey('users');
-  await notify(email, status==='actif'? "Votre compte a été réactivé par l'administrateur." : "Votre compte a été désactivé par l'administrateur.");
-  filterUsers();
+  await withAdminLock(async () => {
+    const u = findUser(email);
+    if(!u){ toast("Utilisateur introuvable (peut-être supprimé)."); filterUsers(); return; }
+    u.status=status; await saveKey('users');
+    await notify(email, status==='actif'? "Votre compte a été réactivé par l'administrateur." : "Votre compte a été désactivé par l'administrateur.");
+    filterUsers();
+  });
 }
 function editUserPrompt(email){
   const u=findUser(email);
@@ -1102,18 +1144,20 @@ function editUserPrompt(email){
   saveKey('users').then(()=>{ toast("Utilisateur modifié."); filterUsers(); });
 }
 async function adminDeleteUser(email){
-  const user = findUser(email);
-  if(!user){ toast("Utilisateur introuvable."); return; }
-  if(email === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
-  if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses ressources seront supprimées\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
-  try{
-    await removeUserCascade(email);
-    toast(`${user.prenom} ${user.nom} a été supprimé(e) avec toutes ses données.`, "Suppression réussie");
-    filterUsers();
-  }catch(e){
-    console.error("Erreur suppression:", e);
-    toast("Erreur lors de la suppression. Réessayez.", "Erreur");
-  }
+  await withAdminLock(async () => {
+    const user = findUser(email);
+    if(!user){ toast("Utilisateur introuvable."); return; }
+    if(email === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
+    if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses ressources seront supprimées\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
+    try{
+      await removeUserCascade(email);
+      toast(`${user.prenom} ${user.nom} a été supprimé(e) avec toutes ses données.`, "Suppression réussie");
+      filterUsers();
+    }catch(e){
+      console.error("Erreur suppression:", e);
+      toast("Erreur lors de la suppression. Réessayez.", "Erreur");
+    }
+  });
 }
 function renderAdminBinomes(){
   document.getElementById('appContent').innerHTML = `
@@ -1143,60 +1187,68 @@ function renderBinomeTable(){
         <td>${b.compat||'—'}%</td>
         <td><span class="badge ${badgeClass}">${b.status}</span></td>
         <td class="row-actions">
-          ${b.status!=='validé'? `<button class="icon-btn" onclick="setBinomeStatus('${b.id}','validé')">Accepter</button>`:''}
-          ${b.status!=='refusé'? `<button class="icon-btn" onclick="setBinomeStatus('${b.id}','refusé')">Refuser</button>`:''}
-          <button class="icon-btn" onclick="modifyBinome('${b.id}')">Modifier</button>
-          <button class="icon-btn" onclick="deleteBinome('${b.id}')">Supprimer</button>
+          ${b.status!=='validé'? `<button class="icon-btn" onclick="setBinomeStatus('${escAttr(b.id)}','validé')">Accepter</button>`:''}
+          ${b.status!=='refusé'? `<button class="icon-btn" onclick="setBinomeStatus('${escAttr(b.id)}','refusé')">Refuser</button>`:''}
+          <button class="icon-btn" onclick="modifyBinome('${escAttr(b.id)}')">Modifier</button>
+          <button class="icon-btn" onclick="deleteBinome('${escAttr(b.id)}')">Supprimer</button>
         </td>
       </tr>`;
     }).join('') || '<tr><td colspan="5" style="color:var(--ink-soft);">Aucun binôme.</td></tr>'}`;
 }
 async function createBinomeManual(){
-  const parrainEmail=document.getElementById('manParrain').value;
-  const filleulEmail=document.getElementById('manFilleul').value;
-  if(!parrainEmail||!filleulEmail){ toast("Sélectionnez un parrain et un filleul."); return; }
-  if(parrainEmail===filleulEmail){ toast("Le parrain et le filleul ne peuvent pas être la même personne."); return; }
-  // Vérifier qu'ils ne sont pas déjà dans un binôme actif ou proposé
-  const parrainBusy = DB.binomes.some(b=>b.parrainEmail===parrainEmail && b.status!=='refusé');
-  const filleulBusy = DB.binomes.some(b=>b.filleulEmail===filleulEmail && b.status!=='refusé');
-  if(parrainBusy){ const p=findUser(parrainEmail); toast(`${p?.prenom} ${p?.nom} est déjà dans un binôme actif.`); return; }
-  if(filleulBusy){ const f=findUser(filleulEmail); toast(`${f?.prenom} ${f?.nom} est déjà dans un binôme actif.`); return; }
-  DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat:100, createdAt:Date.now(), manual:true});
-  await saveKey('binomes');
-  await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur.");
-  await notify(filleulEmail,"Un binôme a été créé manuellement par l'administrateur.");
-  toast("Binôme créé et validé."); renderAdminBinomes();
+  await withAdminLock(async () => {
+    const parrainEmail=document.getElementById('manParrain').value;
+    const filleulEmail=document.getElementById('manFilleul').value;
+    if(!parrainEmail||!filleulEmail){ toast("Sélectionnez un parrain et un filleul."); return; }
+    if(parrainEmail===filleulEmail){ toast("Le parrain et le filleul ne peuvent pas être la même personne."); return; }
+    // Vérifier qu'ils ne sont pas déjà dans un binôme actif ou proposé
+    const parrainBusy = DB.binomes.some(b=>b.parrainEmail===parrainEmail && b.status!=='refusé');
+    const filleulBusy = DB.binomes.some(b=>b.filleulEmail===filleulEmail && b.status!=='refusé');
+    if(parrainBusy){ const p=findUser(parrainEmail); toast(`${p?.prenom} ${p?.nom} est déjà dans un binôme actif.`); return; }
+    if(filleulBusy){ const f=findUser(filleulEmail); toast(`${f?.prenom} ${f?.nom} est déjà dans un binôme actif.`); return; }
+    DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat:100, createdAt:Date.now(), manual:true});
+    await saveKey('binomes');
+    await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur.");
+    await notify(filleulEmail,"Un binôme a été créé manuellement par l'administrateur.");
+    toast("Binôme créé et validé."); renderAdminBinomes();
+  });
 }
 async function setBinomeStatus(id,status){
-  const b=DB.binomes.find(x=>x.id===id);
-  if(!b){ toast("Binôme introuvable (peut-être supprimé)."); renderBinomeTable(); return; }
-  b.status=status;
-  await saveKey('binomes');
-  await notify(b.parrainEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
-  await notify(b.filleulEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
-  renderBinomeTable();
-  const statEl = document.getElementById('statBinomes');
-  if(statEl) statEl.textContent = DB.binomes.filter(x=>x.status==='validé').length;
+  await withAdminLock(async () => {
+    const b=DB.binomes.find(x=>x.id===id);
+    if(!b){ toast("Binôme introuvable (peut-être supprimé)."); renderBinomeTable(); return; }
+    b.status=status;
+    await saveKey('binomes');
+    await notify(b.parrainEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
+    await notify(b.filleulEmail, status==='validé'? "Votre binôme a été validé par l'administrateur !" : "Votre proposition de binôme a été refusée.");
+    renderBinomeTable();
+    const statEl = document.getElementById('statBinomes');
+    if(statEl) statEl.textContent = DB.binomes.filter(x=>x.status==='validé').length;
+  });
 }
 async function modifyBinome(id){
-  const b=DB.binomes.find(x=>x.id===id);
-  if(!b){ toast("Binôme introuvable (peut-être supprimé)."); renderBinomeTable(); return; }
-  const candidates = DB.users.filter(u=>u.role==='filleul').map(u=>u.email+' — '+u.prenom+' '+u.nom).join('\n');
-  const newFilleul = prompt("Nouvel e-mail du filleul :\n"+candidates, b.filleulEmail);
-  if(!newFilleul) return;
-  if(!findUser(newFilleul)){ toast("Utilisateur introuvable."); return; }
-  if(newFilleul !== b.filleulEmail){
-    const filleulBusy = DB.binomes.some(x=>x.id!==id && x.filleulEmail===newFilleul && x.status!=='refusé');
-    if(filleulBusy){ const f=findUser(newFilleul); toast(`${f?.prenom} ${f?.nom} est déjà dans un autre binôme actif.`); return; }
-  }
-  b.filleulEmail=newFilleul; b.status='proposé';
-  await saveKey('binomes'); toast("Binôme modifié, en attente de re-validation.");
-  renderBinomeTable();
+  await withAdminLock(async () => {
+    const b=DB.binomes.find(x=>x.id===id);
+    if(!b){ toast("Binôme introuvable (peut-être supprimé)."); renderBinomeTable(); return; }
+    const candidates = DB.users.filter(u=>u.role==='filleul').map(u=>u.email+' — '+u.prenom+' '+u.nom).join('\n');
+    const newFilleul = prompt("Nouvel e-mail du filleul :\n"+candidates, b.filleulEmail);
+    if(!newFilleul) return;
+    if(!findUser(newFilleul)){ toast("Utilisateur introuvable."); return; }
+    if(newFilleul !== b.filleulEmail){
+      const filleulBusy = DB.binomes.some(x=>x.id!==id && x.filleulEmail===newFilleul && x.status!=='refusé');
+      if(filleulBusy){ const f=findUser(newFilleul); toast(`${f?.prenom} ${f?.nom} est déjà dans un autre binôme actif.`); return; }
+    }
+    b.filleulEmail=newFilleul; b.status='proposé';
+    await saveKey('binomes'); toast("Binôme modifié, en attente de re-validation.");
+    renderBinomeTable();
+  });
 }
 async function deleteBinome(id){
-  DB.binomes = DB.binomes.filter(b=>b.id!==id);
-  await saveKey('binomes'); toast("Binôme supprimé.");
-  renderBinomeTable();
+  await withAdminLock(async () => {
+    DB.binomes = DB.binomes.filter(b=>b.id!==id);
+    await saveKey('binomes'); toast("Binôme supprimé.");
+    renderBinomeTable();
+  });
 }
 function renderAdminResources(){
   document.getElementById('appContent').innerHTML = `<div class="panel"><h3>Modération des ressources</h3><div id="modList"></div></div>`;
@@ -1206,33 +1258,39 @@ function renderAdminResources(){
       <div class="res-top"><div><span class="res-type">${esc(r.type)}</span><h4 style="margin:4px 0;">${esc(r.title)}</h4>
       <span style="font-size:12px;color:var(--ink-soft);">par ${author?esc(author.prenom+' '+author.nom):'—'} · ${r.hidden?'masquée':'visible'}</span></div></div>
       <div class="res-actions">
-        <button onclick="toggleHideResource('${r.id}')">${r.hidden?'Ré-approuver':'Masquer'}</button>
-        <button onclick="deleteResource('${r.id}')">Supprimer</button>
+        <button onclick="toggleHideResource('${escAttr(r.id)}')">${r.hidden?'Ré-approuver':'Masquer'}</button>
+        <button onclick="deleteResource('${escAttr(r.id)}')">Supprimer</button>
       </div>
-      <div class="comment-box">${(r.comments||[]).map((c,i)=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)} <button class="icon-btn" style="margin-left:8px;" onclick="deleteComment('${r.id}',${i})">Suppr.</button></div>`).join('')}</div>
+      <div class="comment-box">${(r.comments||[]).map((c,i)=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)} <button class="icon-btn" style="margin-left:8px;" onclick="deleteComment('${escAttr(r.id)}',${i})">Suppr.</button></div>`).join('')}</div>
     </div>`;
   }).join('') || '<p style="color:var(--ink-soft);">Aucune ressource.</p>';
 }
 async function toggleHideResource(id){
-  const r=DB.resources.find(x=>x.id===id);
-  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
-  r.hidden=!r.hidden;
-  await saveKey('resources'); renderAdminResources();
+  await withAdminLock(async () => {
+    const r=DB.resources.find(x=>x.id===id);
+    if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
+    r.hidden=!r.hidden;
+    await saveKey('resources'); renderAdminResources();
+  });
 }
 async function deleteResource(id){
-  DB.resources = DB.resources.filter(r=>r.id!==id);
-  // Nettoyer les références saved chez tous les utilisateurs
-  DB.users.forEach(u=>{
-    if(u.saved) u.saved = u.saved.filter(sid=>sid!==id);
+  await withAdminLock(async () => {
+    DB.resources = DB.resources.filter(r=>r.id!==id);
+    // Nettoyer les références saved chez tous les utilisateurs
+    DB.users.forEach(u=>{
+      if(u.saved) u.saved = u.saved.filter(sid=>sid!==id);
+    });
+    await saveKey('resources'); await saveKey('users');
+    toast("Ressource supprimée."); renderAdminResources();
   });
-  await saveKey('resources'); await saveKey('users');
-  toast("Ressource supprimée."); renderAdminResources();
 }
 async function deleteComment(id,idx){
-  const r=DB.resources.find(x=>x.id===id);
-  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
-  r.comments.splice(idx,1);
-  await saveKey('resources'); renderAdminResources();
+  await withAdminLock(async () => {
+    const r=DB.resources.find(x=>x.id===id);
+    if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
+    r.comments.splice(idx,1);
+    await saveKey('resources'); renderAdminResources();
+  });
 }
 
 /* ---------- ADMIN: notifications ---------- */
@@ -1314,17 +1372,33 @@ let currentView = 'dashboard';
 const originalGoto = goto;
 goto = function(view){ currentView = view; originalGoto(view); };
 
-setInterval(async () => {
-  if(!SESSION) return;
-  // Ne pas interrompre une saisie en cours (formulaire, chat, etc.)
-  const active = document.activeElement;
-  const isEditing = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
-  if(isEditing) return;
-  await loadDB();
-  // Re-render current view silencieusement
-  const u = me();
-  if(u) originalGoto(currentView);
-}, 30000);
+let autoRefreshInterval = null;
+
+function startAutoRefresh(){
+  if(autoRefreshInterval) return; // Déjà démarré
+  autoRefreshInterval = setInterval(async () => {
+    if(!SESSION){
+      // Pas de session, arrêter l'intervalle
+      stopAutoRefresh();
+      return;
+    }
+    // Ne pas interrompre une saisie en cours (formulaire, chat, etc.)
+    const active = document.activeElement;
+    const isEditing = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
+    if(isEditing) return;
+    await loadDB();
+    // Re-render current view silencieusement
+    const u = me();
+    if(u) originalGoto(currentView);
+  }, 30000);
+}
+
+function stopAutoRefresh(){
+  if(autoRefreshInterval){
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+}
 
 /* ============================================================
    INIT
