@@ -27,6 +27,23 @@ let LAST_SYNCED = {};
 
 async function saveDB(key) {
   if (!DB[key]) return;
+  // Protection critique : ne jamais écrire une liste vide si on avait des données
+  if (Array.isArray(DB[key]) && DB[key].length === 0 && LAST_SYNCED[key] && LAST_SYNCED[key].size > 0) {
+    console.warn(`⚠️ Protection anti-perte : refus d'écrire '${key}' vide (avait ${LAST_SYNCED[key].size} éléments). Rechargement depuis le cloud...`);
+    try {
+      const r = await window.storage.get('am_' + key, true);
+      if (r && r.value) {
+        const cloudData = JSON.parse(r.value);
+        if (Array.isArray(cloudData) && cloudData.length > 0) {
+          DB[key] = cloudData;
+          LAST_SYNCED[key] = new Set(cloudData.map(recordId).filter(Boolean));
+          console.log(`✅ '${key}' restauré depuis le cloud : ${cloudData.length} éléments`);
+          return;
+        }
+      }
+    } catch(e) { console.error("Restauration échouée pour", key, e); }
+    // Si le cloud est aussi vide, on laisse passer (premier démarrage réel)
+  }
   try {
     let finalList = DB[key];
     try {
@@ -72,8 +89,25 @@ async function loadDB(){
   for(const key of Object.keys(DB)){
     try{
       const r = await window.storage.get('am_'+key, true);
-      DB[key] = r && r.value ? JSON.parse(r.value) : [];
-    }catch(e){ DB[key] = []; }
+      const cloudData = r && r.value ? JSON.parse(r.value) : null;
+      // Protection : ne jamais écraser les données locales avec du vide
+      // si on avait déjà des données en local
+      if(cloudData !== null && Array.isArray(cloudData)){
+        if(cloudData.length === 0 && DB[key].length > 0){
+          // Le cloud est vide mais on a des données locales → on garde les locales
+          // (le cloud est probablement corrompu ou en cours de synchronisation)
+          console.warn(`⚠️ Protection anti-perte : le cloud '${key}' est vide mais ${DB[key].length} éléments existent localement. Conservation des données locales.`);
+          // On renvoie quand même les données locales vers le cloud
+          try { await window.storage.set('am_'+key, JSON.stringify(DB[key]), true); } catch(e){}
+        } else {
+          DB[key] = cloudData;
+        }
+      }
+      // Si cloudData est null (document inexistant), on garde les données locales
+    }catch(e){
+      // En cas d'erreur réseau, on NE vide PAS les données locales
+      console.warn(`⚠️ Erreur lecture cloud pour '${key}', conservation des données locales (${DB[key].length} éléments)`, e);
+    }
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
   // La session n'est JAMAIS restaurée depuis le stockage —
@@ -767,12 +801,19 @@ async function changePassword(){
   toast("Mot de passe changé avec succès.");
 }
 async function deleteMyAccount(){
+  if(SESSION === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
   if(!confirm("⚠️ Confirmer la suppression définitive de votre compte ? Cette action est irréversible.")) return;
   await removeUserCascade(SESSION);
   toast("Compte supprimé.");
   logout();
 }
 async function removeUserCascade(email){
+  // Protection : ne jamais supprimer le compte admin via cette fonction
+  if(email === ADMIN_EMAIL){
+    console.warn("⚠️ Tentative de suppression du compte admin bloquée.");
+    toast("Le compte administrateur ne peut pas être supprimé.");
+    return;
+  }
   // 1. Supprimer l'utilisateur
   DB.users = DB.users.filter(u=>u.email!==email);
 
@@ -871,32 +912,45 @@ async function addResource(){
   toast("Ressource partagée et sauvegardée.");
   renderResources();
 }
+// Helper : préserve la position de scroll lors d'un re-render
+function preserveScroll(fn){
+  const scrollY = window.scrollY;
+  const result = fn();
+  // Attendre le re-render du DOM puis restaurer le scroll
+  requestAnimationFrame(()=>{ window.scrollTo(0, scrollY); });
+  return result;
+}
+
 async function toggleLike(id){
   const u=me(); const r=DB.resources.find(x=>x.id===id);
+  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); originalGoto(currentView); return; }
   r.likes = r.likes||[];
   const i=r.likes.indexOf(u.email);
   if(i>-1) r.likes.splice(i,1); else r.likes.push(u.email);
-  await saveKey('resources'); originalGoto(currentView);
+  await saveKey('resources'); preserveScroll(()=>originalGoto(currentView));
 }
 async function downloadResource(id){
   const r=DB.resources.find(x=>x.id===id);
+  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); originalGoto(currentView); return; }
   r.downloads=(r.downloads||0)+1;
   await saveKey('resources');
   toast(r.link? "Téléchargement simulé — "+r.link : "Téléchargement simulé.");
-  originalGoto(currentView);
+  preserveScroll(()=>originalGoto(currentView));
 }
 async function toggleSave(id){
   const u=me(); u.saved=u.saved||[];
   const i=u.saved.indexOf(id);
   if(i>-1) u.saved.splice(i,1); else u.saved.push(id);
-  await saveKey('users'); originalGoto(currentView);
+  await saveKey('users'); preserveScroll(()=>originalGoto(currentView));
 }
 async function addComment(id){
   const input=document.getElementById('cin-'+id); const text=input.value.trim();
   if(!text) return;
-  const r=DB.resources.find(x=>x.id===id); const u=me();
+  const r=DB.resources.find(x=>x.id===id);
+  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); originalGoto(currentView); return; }
+  const u=me();
   r.comments=r.comments||[]; r.comments.push({author:u.prenom+' '+u.nom, authorEmail:u.email, text});
-  await saveKey('resources'); originalGoto(currentView);
+  await saveKey('resources'); preserveScroll(()=>originalGoto(currentView));
 }
 function renderSaved(){
   const u=me();
@@ -914,6 +968,10 @@ function conversationsFor(email){
 }
 function renderMessages(){
   const u=me();
+  // Nettoyer currentChatWith si le partenaire n'existe plus
+  if(currentChatWith && !findUser(currentChatWith)){
+    currentChatWith = null;
+  }
   const convs = conversationsFor(u.email);
   if(!currentChatWith && convs.length) currentChatWith = convs[0];
   document.getElementById('appContent').innerHTML = `
@@ -1046,6 +1104,7 @@ function editUserPrompt(email){
 async function adminDeleteUser(email){
   const user = findUser(email);
   if(!user){ toast("Utilisateur introuvable."); return; }
+  if(email === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
   if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses ressources seront supprimées\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
   try{
     await removeUserCascade(email);
