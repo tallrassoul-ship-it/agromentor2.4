@@ -637,7 +637,7 @@ async function finishRegister(){
   enterApp();
 }
 
-/* ---------- simple compatibility auto-match ---------- */
+/* ---------- enhanced compatibility auto-match ---------- */
 async function tryAutoMatch(user){
   const oppRole = user.role==='parrain' ? 'filleul' : 'parrain';
   const candidates = DB.users.filter(u=>u.role===oppRole && u.status==='actif' &&
@@ -645,9 +645,85 @@ async function tryAutoMatch(user){
   if(!candidates.length) return;
   let best=null, bestScore=-1;
   candidates.forEach(c=>{
-    const shared = (c.interests||[]).filter(i=>(user.interests||[]).includes(i)).length;
+    let score = 0;
+
+    // 1. Centres d'intérêt communs (×20 par intérêt partagé)
+    const sharedInterests = (c.interests||[]).filter(i=>(user.interests||[]).includes(i)).length;
+    score += sharedInterests * 20;
+
+    // 2. Activités partagées (×10 par activité partagée)
     const sharedAct = (c.activities||[]).filter(i=>(user.activities||[]).includes(i)).length;
-    const score = shared*20 + sharedAct*10 + (c.domaine===user.domaine?15:0) + (c.dispo===user.dispo?10:0) + (c.niveau===user.niveau?5:0);
+    score += sharedAct * 10;
+
+    // 3. Domaine préféré identique (+15)
+    if(c.domaine && user.domaine && c.domaine.toLowerCase() === user.domaine.toLowerCase()){
+      score += 15;
+    }
+
+    // 4. Disponibilités identiques (+10)
+    if(c.dispo && user.dispo && c.dispo === user.dispo){
+      score += 10;
+    }
+
+    // 5. Niveau d'étude identique (+5)
+    if(c.niveau && user.niveau && c.niveau === user.niveau){
+      score += 5;
+    }
+
+    // 6. Même ville de résidence (+15) — facilite les rencontres en personne
+    if(c.ville && user.ville && c.ville.toLowerCase().trim() === user.ville.toLowerCase().trim()){
+      score += 15;
+    }
+
+    // 7. Tranche d'âge similaire (+10 si ±3 ans, +5 si ±5 ans)
+    if(c.dob && user.dob){
+      const ageA = calcAge(c.dob);
+      const ageB = calcAge(user.dob);
+      if(ageA && ageB){
+        const diff = Math.abs(ageA - ageB);
+        if(diff <= 3) score += 10;
+        else if(diff <= 5) score += 5;
+      }
+    }
+
+    // 8. Personnalité identique (+8) ou compatible (+4)
+    if(c.perso && user.perso){
+      if(c.perso === user.perso) score += 8;
+      else {
+        // Ambivert(e) est compatible avec tout le monde
+        if(c.perso.includes('Ambivert') || user.perso.includes('Ambivert')) score += 4;
+      }
+    }
+
+    // 9. Compétences (correspondance partielle de mots-clés, jusqu'à +10)
+    if(c.competences && user.competences){
+      const compScore = matchTextSimilarity(c.competences, user.competences) * 10;
+      score += compScore;
+    }
+
+    // 10. Objectifs académiques (correspondance partielle, jusqu'à +10)
+    if(c.objectifs && user.objectifs){
+      const objScore = matchTextSimilarity(c.objectifs, user.objectifs) * 10;
+      score += objScore;
+    }
+
+    // 11. Expérience (+5 même niveau, +3 niveau adjacent)
+    if(c.exp && user.exp){
+      const expLevels = ['Débutant','Intermédiaire','Avancé'];
+      const idxA = expLevels.indexOf(c.exp);
+      const idxB = expLevels.indexOf(user.exp);
+      if(idxA >= 0 && idxB >= 0){
+        const diff = Math.abs(idxA - idxB);
+        if(diff === 0) score += 5;
+        else if(diff === 1) score += 3;
+      }
+    }
+
+    // 12. Même sexe (+3) — peut faciliter la communication
+    if(c.sexe && user.sexe && c.sexe === user.sexe){
+      score += 3;
+    }
+
     if(score>bestScore){ bestScore=score; best=c; }
   });
   if(!best) return;
@@ -663,6 +739,29 @@ async function tryAutoMatch(user){
   await notify(binome.parrainEmail, "Un binôme vous a été proposé automatiquement, en attente de validation.");
   await notify(binome.filleulEmail, "Un binôme vous a été proposé automatiquement, en attente de validation.");
   await notify(ADMIN_EMAIL, "Nouvelle proposition de binôme en attente de validation.");
+}
+
+/* ---------- helpers for compatibility matching ---------- */
+function calcAge(dob){
+  if(!dob) return null;
+  const birth = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if(m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age > 0 && age < 120 ? age : null;
+}
+
+function matchTextSimilarity(textA, textB){
+  if(!textA || !textB) return 0;
+  // Extraire les mots significatifs (min 3 caractères, en minuscules)
+  const wordsA = new Set(textA.toLowerCase().replace(/[^a-zà-ÿ0-9\s]/g,' ').split(/\s+/).filter(w=>w.length>=3));
+  const wordsB = new Set(textB.toLowerCase().replace(/[^a-zà-ÿ0-9\s]/g,' ').split(/\s+/).filter(w=>w.length>=3));
+  if(wordsA.size === 0 || wordsB.size === 0) return 0;
+  let matches = 0;
+  wordsA.forEach(w=>{ if(wordsB.has(w)) matches++; });
+  // Retourne un score entre 0 et 1
+  return matches / Math.max(wordsA.size, wordsB.size);
 }
 
 /* ============================================================
