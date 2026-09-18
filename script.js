@@ -123,11 +123,28 @@ async function loadDB(){
         } else {
           DB[key] = cloudData;
         }
+        // Nettoyage automatique des doublons (par email pour users, par id pour les autres)
+        if(key === 'users'){
+          const seen = new Set();
+          DB[key] = DB[key].filter(u => {
+            if(!u.email || seen.has(u.email.toLowerCase())) return false;
+            seen.add(u.email.toLowerCase());
+            return true;
+          });
+        } else if(key === 'binomes' || key === 'resources'){
+          const seen = new Set();
+          DB[key] = DB[key].filter(item => {
+            const id = item.id;
+            if(!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        }
       }
       // Si cloudData est null (document inexistant), on garde les données locales
     }catch(e){
       // En cas d'erreur réseau, on NE vide PAS les données locales
-      console.warn(`⚠️ Erreur lecture cloud pour '${key}', conservation des données locales (${DB[key].length} éléments)`, e);
+      console.warn(`️ Erreur lecture cloud pour '${key}', conservation des données locales (${DB[key].length} éléments)`, e);
     }
     LAST_SYNCED[key] = new Set(DB[key].map(recordId).filter(Boolean));
   }
@@ -275,6 +292,8 @@ if(faqListEl){
 function toggleFaq(i){ document.getElementById('faq'+i)?.classList.toggle('open'); }
 
 let contactSending = false;
+let registering = false;
+
 async function submitContact(e){
   e.preventDefault();
   if(contactSending) return false;
@@ -613,23 +632,45 @@ function regNext(step){
   document.querySelector('.step-track').innerHTML = ['Identité','Compte','Questionnaire','Confirmation'].map((s,i)=>`<div class="${i<=regStep?'done':''}"></div>`).join('');
 }
 async function finishRegister(){
-  const passwordHash = await sha256(regData.password);
-  const user = {
-    email:regData.email, passwordHash, nom:regData.nom, prenom:regData.prenom,
-    dob:regData.dob, sexe:regData.sexe, ville:regData.ville, niveau:regData.niveau, tel:regData.tel,
-    role:regData.role, status:'actif',
-    interests:regData.interests, activities:regData.activities, competences:regData.competences,
-    objectifs:regData.objectifs, perso:regData.perso, dispo:regData.dispo, domaine:regData.domaine, exp:regData.exp,
-    createdAt:Date.now(), saved:[]
-  };
-  DB.users.push(user);
-  await saveKey('users');
-  await tryAutoMatch(user);
-  await notify(ADMIN_EMAIL, `Nouveau compte créé : ${user.prenom} ${user.nom} (${user.role}).`);
-  SESSION=user.email; await saveSession();
-  closeAuth();
-  toast("Bienvenue sur AgroMentor ! Votre profil est enregistré.","Compte créé");
-  enterApp();
+  // Protection anti-doublon : empêcher les soumissions multiples
+  if(registering) return;
+  registering = true;
+  
+  // Désactiver le bouton
+  const btn = document.querySelector('#regStepBody .btn-primary');
+  if(btn){ btn.disabled = true; btn.textContent = 'Création en cours...'; btn.style.opacity = '0.6'; }
+  
+  try {
+    // Vérification finale : l'email n'existe-t-il pas déjà ?
+    if(findUser(regData.email)){ 
+      toast("Un compte existe déjà avec cet e-mail."); 
+      return; 
+    }
+    
+    const passwordHash = await sha256(regData.password);
+    const user = {
+      email:regData.email, passwordHash, nom:regData.nom, prenom:regData.prenom,
+      dob:regData.dob, sexe:regData.sexe, ville:regData.ville, niveau:regData.niveau, tel:regData.tel,
+      role:regData.role, status:'actif',
+      interests:regData.interests, activities:regData.activities, competences:regData.competences,
+      objectifs:regData.objectifs, perso:regData.perso, dispo:regData.dispo, domaine:regData.domaine, exp:regData.exp,
+      createdAt:Date.now(), saved:[]
+    };
+    DB.users.push(user);
+    await saveKey('users');
+    await tryAutoMatch(user);
+    await notify(ADMIN_EMAIL, `Nouveau compte créé : ${user.prenom} ${user.nom} (${user.role}).`);
+    SESSION=user.email; await saveSession();
+    closeAuth();
+    toast("Bienvenue sur AgroMentor ! Votre profil est enregistré.","Compte créé");
+    enterApp();
+  } catch(e){
+    console.error("Erreur inscription:", e);
+    toast("Erreur lors de la création du compte. Réessayez.","Erreur");
+  } finally {
+    registering = false;
+    if(btn){ btn.disabled = false; btn.textContent = 'Créer mon compte'; btn.style.opacity = '1'; }
+  }
 }
 
 /* ---------- enhanced compatibility auto-match ---------- */
