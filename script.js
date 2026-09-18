@@ -238,7 +238,7 @@ function renderRings(active){
         opacity="${i<=active?1:0.6}"
         style="transition:all .4s ease"/>
     `).join('')}
-    <circle cx="200" cy="200" r="20" fill="var(--orange)" style="transition:all .3s"/>
+    <circle cx="200" cy="200" r="20" fill="var(--green)" style="transition:all .3s"/>
     <text x="200" y="206" text-anchor="middle" font-family="Space Grotesk" font-weight="700" fill="#fff" font-size="15">0${active+1}</text>
   </svg>`;
   const ringsEl = document.getElementById('ringsSvg');
@@ -311,11 +311,6 @@ function footerHTML(){
         <div>
           <div class="logo" style="color:#fff;margin-bottom:10px;"><div class="logo-mark">🌱</div>AgroMentor</div>
           <p>Plateforme de parrainage et de mentorat du département Sciences et Techniques Agro-Alimentaires et Nutritionnelles (STAAN).</p>
-          <div class="social-row">
-            <a href="#" onclick="return false;" title="Facebook">f</a>
-            <a href="#" onclick="return false;" title="LinkedIn">in</a>
-            <a href="#" onclick="return false;" title="Instagram">ig</a>
-          </div>
         </div>
         <div><h5>Département</h5>
           <a href="#about">À propos</a><a href="#how">Comment ça fonctionne</a><a href="#contact">Coordonnées</a>
@@ -562,7 +557,7 @@ function checkPassStrength(){
   if(/[^A-Za-z0-9]/.test(pass)) strength++;
   const pct = (strength/5)*100;
   fill.style.width = pct+'%';
-  fill.style.background = pct < 40 ? '#C24A3A' : pct < 70 ? '#E2762E' : '#2F6B45';
+  fill.style.background = pct < 40 ? '#2e7d32' : pct < 70 ? '#4caf50' : '#2F6B45';
 }
 function toggleChip(el,field,val){
   el.classList.toggle('sel');
