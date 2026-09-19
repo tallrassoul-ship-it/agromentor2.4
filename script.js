@@ -683,81 +683,66 @@ async function tryAutoMatch(user){
   candidates.forEach(c=>{
     let score = 0;
 
-    // 1. Centres d'intérêt communs (×20 par intérêt partagé)
+    // 1. Centres d'intérêt communs (+10 par intérêt partagé)
     const sharedInterests = (c.interests||[]).filter(i=>(user.interests||[]).includes(i)).length;
-    score += sharedInterests * 20;
+    score += sharedInterests * 10;
 
-    // 2. Activités partagées (×10 par activité partagée)
+    // 2. Activités partagées (+10 par activité partagée)
     const sharedAct = (c.activities||[]).filter(i=>(user.activities||[]).includes(i)).length;
     score += sharedAct * 10;
 
-    // 3. Domaine préféré identique (+15)
+    // 3. Même ville de résidence (+30)
+    if(c.ville && user.ville && c.ville.toLowerCase().trim() === user.ville.toLowerCase().trim()){
+      score += 30;
+    }
+
+    // 4. Personnalité identique (+20)
+    if(c.perso && user.perso){
+      if(c.perso === user.perso){
+        score += 20;
+      } else {
+        // Personnalité compatible : Ambivert(e) avec tout le monde (+10)
+        if(c.perso.includes('Ambivert') || user.perso.includes('Ambivert')) score += 10;
+      }
+    }
+
+    // 5. Domaine préféré identique (+15)
     if(c.domaine && user.domaine && c.domaine.toLowerCase() === user.domaine.toLowerCase()){
       score += 15;
     }
 
-    // 4. Disponibilités identiques (+10)
+    // 6. Disponibilités identiques (+10)
     if(c.dispo && user.dispo && c.dispo === user.dispo){
       score += 10;
     }
 
-    // 5. Niveau d'étude identique (+5)
-    if(c.niveau && user.niveau && c.niveau === user.niveau){
-      score += 5;
-    }
-
-    // 6. Même ville de résidence (+15) — facilite les rencontres en personne
-    if(c.ville && user.ville && c.ville.toLowerCase().trim() === user.ville.toLowerCase().trim()){
-      score += 15;
-    }
-
-    // 7. Tranche d'âge similaire (+10 si ±3 ans, +5 si ±5 ans)
-    if(c.dob && user.dob){
-      const ageA = calcAge(c.dob);
-      const ageB = calcAge(user.dob);
-      if(ageA && ageB){
-        const diff = Math.abs(ageA - ageB);
-        if(diff <= 3) score += 10;
-        else if(diff <= 5) score += 5;
-      }
-    }
-
-    // 8. Personnalité identique (+8) ou compatible (+4)
-    if(c.perso && user.perso){
-      if(c.perso === user.perso) score += 8;
-      else {
-        // Ambivert(e) est compatible avec tout le monde
-        if(c.perso.includes('Ambivert') || user.perso.includes('Ambivert')) score += 4;
-      }
-    }
-
-    // 9. Compétences (correspondance partielle de mots-clés, jusqu'à +10)
-    if(c.competences && user.competences){
-      const compScore = matchTextSimilarity(c.competences, user.competences) * 10;
-      score += compScore;
-    }
-
-    // 10. Objectifs académiques (correspondance partielle, jusqu'à +10)
-    if(c.objectifs && user.objectifs){
-      const objScore = matchTextSimilarity(c.objectifs, user.objectifs) * 10;
-      score += objScore;
-    }
-
-    // 11. Expérience (+5 même niveau, +3 niveau adjacent)
+    // 7. Expérience identique (+10) ou adjacente (+5)
     if(c.exp && user.exp){
       const expLevels = ['Débutant','Intermédiaire','Avancé'];
       const idxA = expLevels.indexOf(c.exp);
       const idxB = expLevels.indexOf(user.exp);
       if(idxA >= 0 && idxB >= 0){
         const diff = Math.abs(idxA - idxB);
-        if(diff === 0) score += 5;
-        else if(diff === 1) score += 3;
+        if(diff === 0) score += 10;
+        else if(diff === 1) score += 5;
       }
     }
 
-    // 12. Même sexe (+3) — peut faciliter la communication
+    // 8. Compétences (correspondance partielle de mots-clés, jusqu'à +10)
+    if(c.competences && user.competences){
+      const compScore = matchTextSimilarity(c.competences, user.competences) * 10;
+      score += compScore;
+    }
+
+    // 9. Objectifs académiques (correspondance partielle, jusqu'à +10)
+    if(c.objectifs && user.objectifs){
+      const objScore = matchTextSimilarity(c.objectifs, user.objectifs) * 10;
+      score += objScore;
+    }
+
+    // 10. Même sexe (+10)
     if(c.sexe && user.sexe && c.sexe === user.sexe){
-      score += 3;
+      score += 10;
     }
 
     if(score>bestScore){ bestScore=score; best=c; }
