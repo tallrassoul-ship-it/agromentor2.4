@@ -3,7 +3,7 @@
    ============================================================ */
 
 /* ---------- Data store ---------- */
-let DB = { users:[], binomes:[], resources:[], messages:[], notifications:[] };
+let DB = { users:[], binomes:[], messages:[], notifications:[] };
 let SESSION = null;
 let currentChatWith = null;
 let regStep = 0;
@@ -131,7 +131,7 @@ async function loadDB(){
             seen.add(u.email.toLowerCase());
             return true;
           });
-        } else if(key === 'binomes' || key === 'resources'){
+        } else if(key === 'binomes'){
           const seen = new Set();
           DB[key] = DB[key].filter(item => {
             const id = item.id;
@@ -277,7 +277,6 @@ const FAQS = [
   ["Qui peut s'inscrire sur AgroMentor ?","La plateforme est exclusivement réservée aux étudiants du département STAAN, parrains comme filleuls."],
   ["Comment est choisi mon binôme ?","Un algorithme de compatibilité propose un binôme selon vos centres d'intérêt, disponibilités et objectifs. La proposition est ensuite validée, modifiée ou refusée par l'administrateur."],
   ["Puis-je changer de parrain ou de filleul ?","Oui, contactez l'administration : elle peut modifier ou recréer un binôme."],
-  ["Comment partager un document ?","Depuis votre tableau de bord, section Ressources, vous pouvez partager PDF, Word, PowerPoint, liens, images et vidéos."],
   ["Mes données sont-elles protégées ?","Les mots de passe sont chiffrés et l'accès est protégé contre les injections SQL et les attaques XSS."],
   ["Combien de temps dure le parrainage ?","Le parrainage dure typiquement une année universitaire, mais peut être prolongé d'un commun accord."]
 ];
@@ -334,7 +333,7 @@ function footerHTML(){
         <div><h5>Département</h5>
           <a href="#about">À propos</a><a href="#how">Comment ça fonctionne</a><a href="#contact">Coordonnées</a>
         </div>
-        <div><h5>Ressources</h5>
+        <div><h5>Informations</h5>
           <a href="#faq">FAQ</a>
           <a href="#" onclick="event.preventDefault();toast('Politique de confidentialité disponible sur demande à l\\'administration.')">Politique de confidentialité</a>
           <a href="#" onclick="event.preventDefault();toast('Conditions d\\'utilisation disponibles sur demande à l\\'administration.')">Conditions d'utilisation</a>
@@ -371,19 +370,6 @@ async function shareSite(){
   const link = baseShareLink();
   await copyLink(link);
   toast('Lien copié : '+link,'Partagé');
-}
-async function shareResource(id){
-  const link = baseShareLink()+'#ressource-'+id;
-  await copyLink(link);
-  const r = DB.resources.find(x=>x.id===id);
-  if(r){ 
-    r.shares=(r.shares||0)+1; 
-    await saveKey('resources'); 
-    preserveScroll(()=>originalGoto(currentView));
-    toast('Lien de la ressource copié.','Repartagé');
-  } else {
-    toast('Ressource introuvable (peut-être supprimée).');
-  }
 }
 
 /* ============================================================
@@ -836,22 +822,20 @@ function renderSidebar(mode){
     </div>`;
 }
 const TITLES = {
-  dashboard:"Vue d'ensemble", profile:"Mon profil", binome:"Mon binôme", resources:"Ressources partagées",
-  saved:"Mes éléments enregistrés", messages:"Messagerie", notifications:"Notifications",
+  dashboard:"Vue d'ensemble", profile:"Mon profil", binome:"Mon binôme",
+  messages:"Messagerie", notifications:"Notifications",
   'admin-overview':"Statistiques de la plateforme", 'admin-users':"Gestion des utilisateurs",
-  'admin-binomes':"Gestion des binômes", 'admin-resources':"Gestion des ressources",
-  'admin-notifications':"Notifications"
+  'admin-binomes':"Gestion des binômes", 'admin-notifications':"Notifications"
 };
 function goto(view){
   document.getElementById('topbarTitle').textContent = TITLES[view]||'';
   document.querySelectorAll('.side-link').forEach(s=>s.classList.remove('active'));
   const sl=document.getElementById('side-'+view); if(sl) sl.classList.add('active');
   const renderers = {
-    dashboard:renderDashboard, profile:renderProfile, binome:renderBinomeUser, resources:renderResources,
-    saved:renderSaved, messages:renderMessages, notifications:renderNotifications,
+    dashboard:renderDashboard, profile:renderProfile, binome:renderBinomeUser,
+    messages:renderMessages, notifications:renderNotifications,
     'admin-overview':renderAdminOverview, 'admin-users':renderAdminUsers,
-    'admin-binomes':renderAdminBinomes, 'admin-resources':renderAdminResources,
-    'admin-notifications':renderAdminNotifications
+    'admin-binomes':renderAdminBinomes, 'admin-notifications':renderAdminNotifications
   };
   (renderers[view]||renderDashboard)();
 }
@@ -864,7 +848,6 @@ function myBinome(){
 function renderDashboard(){
   const u=me();
   const b = myBinome();
-  const myRes = DB.resources.filter(r=>r.author===u.email);
   const unread = DB.notifications.filter(n=>n.forEmail===u.email && !n.read).length;
   document.getElementById('appContent').innerHTML = `
     <div class="panel profile-card">
@@ -876,9 +859,7 @@ function renderDashboard(){
     </div>
     <div class="stat-grid">
       <div class="stat-box"><b>${b? '1':'0'}</b><span>Binôme actif</span></div>
-      <div class="stat-box"><b>${myRes.length}</b><span>Ressources partagées</span></div>
       <div class="stat-box"><b>${unread}</b><span>Notifications non lues</span></div>
-      <div class="stat-box"><b>${(u.saved||[]).length}</b><span>Éléments enregistrés</span></div>
     </div>
     <div class="panel">
       <h3>Mon binôme</h3>
@@ -982,140 +963,17 @@ async function removeUserCascade(email){
     return b.parrainEmail!==email && b.filleulEmail!==email;
   });
 
-  // 3. Supprimer ses ressources
-  DB.resources = DB.resources.filter(r=>r.author!==email);
-
-  // 4. Nettoyer ses likes et ses commentaires dans les ressources restantes
-  DB.resources.forEach(r=>{
-    r.likes = (r.likes||[]).filter(l=>l!==email);
-    r.comments = (r.comments||[]).filter(c=>{
-      const authorEmail = (c.authorEmail||'').toLowerCase();
-      return authorEmail !== email.toLowerCase();
-    });
-  });
-
-  // 5. Supprimer ses messages
+  // 3. Supprimer ses messages
   DB.messages = DB.messages.filter(m=>m.from!==email && m.to!==email);
 
-  // 6. Supprimer ses notifications
+  // 4. Supprimer ses notifications
   DB.notifications = DB.notifications.filter(n=>n.forEmail!==email);
 
-  // 7. Le retirer des listes saved des autres utilisateurs (garde seulement les ressources qui existent encore)
-  DB.users.forEach(u=>{
-    if(u.saved) u.saved = u.saved.filter(id=>DB.resources.find(r=>r.id===id));
-  });
-
-  // 8. Sauvegarder toutes les collections modifiées
+  // 5. Sauvegarder toutes les collections modifiées
   await saveKey('users');
   await saveKey('binomes');
-  await saveKey('resources');
   await saveKey('messages');
   await saveKey('notifications');
-}
-
-/* ---------- USER: resources ---------- */
-function renderResources(){
-  const u=me();
-  document.getElementById('appContent').innerHTML = `
-    <div class="panel">
-      <h3>Partager une ressource</h3>
-      <div class="form-grid">
-        <div class="field"><label>Titre</label><input id="resTitle" placeholder="Ex: TP analyse sensorielle"></div>
-        <div class="field"><label>Type</label><select id="resType">
-          <option>PDF</option><option>Cours</option><option>Word</option><option>PowerPoint</option><option>Lien</option><option>Image</option><option>Vidéo</option>
-        </select></div>
-      </div>
-      <div class="field"><label>Lien ou description</label><input id="resLink" placeholder="URL du fichier ou du lien utile"></div>
-      <button class="btn btn-primary" onclick="addResource()">Publier</button>
-    </div>
-    <div id="resList"></div>`;
-  renderResourceList('resList', DB.resources.filter(r=>!r.hidden).slice().reverse());
-}
-function renderResourceList(targetId, list){
-  const u=me();
-  const target = document.getElementById(targetId);
-  if(!target) return;
-  target.innerHTML = list.map(r=>{
-    const author = findUser(r.author);
-    const liked = (r.likes||[]).includes(u.email);
-    const saved = (u.saved||[]).includes(r.id);
-    return `<div class="res-card" id="rc-${r.id}">
-      <div class="res-top">
-        <div><span class="res-type">${esc(r.type)}</span><h4 style="margin:4px 0;color:var(--forest);">${esc(r.title)}</h4>
-        <span style="font-size:12px;color:var(--ink-soft);">par ${author? esc(author.prenom+' '+author.nom) : 'Utilisateur'} · ${new Date(r.createdAt).toLocaleDateString('fr-FR')}</span></div>
-      </div>
-      <p style="font-size:13.5px;color:var(--ink-soft);word-break:break-all;">${esc(r.link||'')}</p>
-      <div class="res-actions">
-        <button class="${liked?'liked':''}" onclick="toggleLike('${escAttr(r.id)}')">👍 ${(r.likes||[]).length}</button>
-        <button onclick="downloadResource('${escAttr(r.id)}')">⬇️ Télécharger (${r.downloads||0})</button>
-        <button class="${saved?'saved':''}" onclick="toggleSave('${escAttr(r.id)}')">${saved?'★ Enregistré':'☆ Enregistrer'}</button>
-        <button onclick="shareResource('${escAttr(r.id)}')">↗️ Repartager (${r.shares||0})</button>
-      </div>
-      <div class="comment-box">
-        ${(r.comments||[]).map(c=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)}</div>`).join('')}
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <input placeholder="Ajouter un commentaire..." id="cin-${r.id}" style="flex:1;" onkeydown="if(event.key==='Enter')addComment('${escAttr(r.id)}')">
-          <button class="btn btn-sm btn-outline" onclick="addComment('${escAttr(r.id)}')">Envoyer</button>
-        </div>
-      </div>
-    </div>`;
-  }).join('') || '<p style="color:var(--ink-soft);">Aucune ressource pour le moment.</p>';
-}
-async function addResource(){
-  const title=document.getElementById('resTitle').value.trim();
-  const type=document.getElementById('resType').value;
-  const link=document.getElementById('resLink').value.trim();
-  if(!title){ toast("Merci d'indiquer un titre."); return; }
-  const r={id:uid(), author:SESSION, title, type, link, likes:[], comments:[], downloads:0, shares:0, createdAt:Date.now()};
-  DB.resources.push(r);
-  await saveKey('resources');
-  toast("Ressource partagée et sauvegardée.");
-  renderResources();
-}
-// Helper : préserve la position de scroll lors d'un re-render
-function preserveScroll(fn){
-  const scrollY = window.scrollY;
-  const result = fn();
-  // Attendre le re-render du DOM puis restaurer le scroll
-  requestAnimationFrame(()=>{ window.scrollTo(0, scrollY); });
-  return result;
-}
-
-async function toggleLike(id){
-  const u=me(); const r=DB.resources.find(x=>x.id===id);
-  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); originalGoto(currentView); return; }
-  r.likes = r.likes||[];
-  const i=r.likes.indexOf(u.email);
-  if(i>-1) r.likes.splice(i,1); else r.likes.push(u.email);
-  await saveKey('resources'); preserveScroll(()=>originalGoto(currentView));
-}
-async function downloadResource(id){
-  const r=DB.resources.find(x=>x.id===id);
-  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); originalGoto(currentView); return; }
-  r.downloads=(r.downloads||0)+1;
-  await saveKey('resources');
-  toast(r.link? "Téléchargement simulé — "+r.link : "Téléchargement simulé.");
-  preserveScroll(()=>originalGoto(currentView));
-}
-async function toggleSave(id){
-  const u=me(); u.saved=u.saved||[];
-  const i=u.saved.indexOf(id);
-  if(i>-1) u.saved.splice(i,1); else u.saved.push(id);
-  await saveKey('users'); preserveScroll(()=>originalGoto(currentView));
-}
-async function addComment(id){
-  const input=document.getElementById('cin-'+id); const text=input.value.trim();
-  if(!text) return;
-  const r=DB.resources.find(x=>x.id===id);
-  if(!r){ toast("Ressource introuvable (peut-être supprimée)."); originalGoto(currentView); return; }
-  const u=me();
-  r.comments=r.comments||[]; r.comments.push({author:u.prenom+' '+u.nom, authorEmail:u.email, text});
-  await saveKey('resources'); preserveScroll(()=>originalGoto(currentView));
-}
-function renderSaved(){
-  const u=me();
-  document.getElementById('appContent').innerHTML = '<div class="panel"><h3>Mes éléments enregistrés</h3><p style="color:var(--ink-soft);font-size:13.5px;">Retrouvez ici vos ressources, discussions et annonces sauvegardées.</p></div><div id="savedList"></div>';
-  renderResourceList('savedList', DB.resources.filter(r=>!r.hidden && (u.saved||[]).includes(r.id)));
 }
 
 /* ---------- USER: messages ---------- */
@@ -1189,9 +1047,7 @@ function renderAdminOverview(){
   const nbFilleuls = DB.users.filter(u=>u.role==='filleul').length;
   const actifs = DB.binomes.filter(b=>b.status==='validé').length;
   const avgCompat = DB.binomes.length? Math.round(DB.binomes.reduce((s,b)=>s+(b.compat||0),0)/DB.binomes.length) : 0;
-  const visibleRes = DB.resources.filter(r=>!r.hidden);
-  const nbRes = visibleRes.length;
-  const nbDl = visibleRes.reduce((s,r)=>s+(r.downloads||0),0);
+
   const activeUsers = DB.users.filter(u=>u.status==='actif' && u.role!=='admin').length;
   const newSignups = DB.users.filter(u=>u.createdAt && (Date.now()-u.createdAt)<7*86400000).length;
 
@@ -1199,11 +1055,11 @@ function renderAdminOverview(){
   const statBinomesEl = document.getElementById('statBinomes');
   const statBinomesBadgeEl = document.getElementById('statBinomesBadge');
   const statUsersEl = document.getElementById('statUsers');
-  const statResourcesEl = document.getElementById('statResources');
+
   if(statBinomesEl) statBinomesEl.textContent = actifs;
   if(statBinomesBadgeEl) statBinomesBadgeEl.textContent = actifs;
   if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
-  if(statResourcesEl) animateCounter(statResourcesEl, nbRes);
+
 
   document.getElementById('appContent').innerHTML = `
     <div class="panel"><h3>Statistiques générales</h3>
@@ -1212,8 +1068,7 @@ function renderAdminOverview(){
         <div class="stat-box"><b>${nbFilleuls}</b><span>Filleuls</span></div>
         <div class="stat-box"><b>${actifs}</b><span>Binômes actifs</span></div>
         <div class="stat-box"><b>${avgCompat}%</b><span>Compatibilité moyenne</span></div>
-        <div class="stat-box"><b>${nbRes}</b><span>Ressources partagées</span></div>
-        <div class="stat-box"><b>${nbDl}</b><span>Téléchargements</span></div>
+
         <div class="stat-box"><b>${activeUsers}</b><span>Utilisateurs actifs</span></div>
         <div class="stat-box"><b>${newSignups}</b><span>Nouvelles inscriptions (7j)</span></div>
       </div>
@@ -1268,7 +1123,7 @@ async function adminDeleteUser(email){
     const user = findUser(email);
     if(!user){ toast("Utilisateur introuvable."); return; }
     if(email === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
-    if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses ressources seront supprimées\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
+    if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
     try{
       await removeUserCascade(email);
       toast(`${user.prenom} ${user.nom} a été supprimé(e) avec toutes ses données.`, "Suppression réussie");
@@ -1448,10 +1303,7 @@ async function markAllNotificationsRead(){
    DEEP LINK
    ============================================================ */
 function handleDeepLink(){
-  if(location.hash.startsWith('#ressource-') && SESSION){
-    const id = location.hash.replace('#ressource-','');
-    setTimeout(()=>{ goto('resources'); const el=document.getElementById('rc-'+id); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); },300);
-  }
+  // Deep link désactivé (plus de ressources)
 }
 
 /* ============================================================
@@ -1529,11 +1381,11 @@ function stopAutoRefresh(){
   const statBinomesEl = document.getElementById('statBinomes');
   const statBinomesBadgeEl = document.getElementById('statBinomesBadge');
   const statUsersEl = document.getElementById('statUsers');
-  const statResourcesEl = document.getElementById('statResources');
+
   if(statBinomesEl) animateCounter(statBinomesEl, actifs);
   if(statBinomesBadgeEl) animateCounter(statBinomesBadgeEl, actifs);
   if(statUsersEl) animateCounter(statUsersEl, DB.users.filter(u=>u.role!=='admin').length);
-  if(statResourcesEl) animateCounter(statResourcesEl, DB.resources.filter(r=>!r.hidden).length);
+
   renderShowcase();
   // Si une session existe et l'utilisateur est valide, on entre dans l'app
   if(SESSION && findUser(SESSION)){
