@@ -391,19 +391,6 @@ tr:hover{background:rgba(47,107,69,.03);}
 }
 .icon-btn:hover{border-color:var(--forest);color:var(--forest);background:rgba(21,56,38,.04);}
 
-.res-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px;transition:var(--transition);}
-.res-card:hover{box-shadow:0 4px 16px rgba(21,56,38,.08);}
-.res-top{display:flex;justify-content:space-between;gap:10px;}
-.res-type{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--green);}
-.res-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
-.res-actions button{background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12.5px;color:var(--ink-soft);transition:var(--transition);}
-.res-actions button:hover{border-color:var(--green);color:var(--green);}
-.res-actions button.liked{background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7;}
-.res-actions button.saved{background:var(--leaf-soft);color:var(--green);border-color:var(--leaf);}
-.comment-box{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;font-size:13px;}
-.comment-line{margin-bottom:6px;color:var(--ink-soft);padding:4px 8px;border-radius:6px;transition:background .15s;}
-.comment-line:hover{background:var(--cream);}
-.comment-line b{color:var(--forest);}
 
 .chat-wrap{display:grid;grid-template-columns:260px 1fr;gap:16px;height:520px;}
 .conv-list{border:1px solid var(--line);border-radius:14px;overflow:auto;background:#fff;}
@@ -488,7 +475,6 @@ tr:hover{background:rgba(47,107,69,.03);}
   .msg{max-width:88%;}
   table{font-size:12.5px;}
   th,td{padding:8px 6px;}
-  .res-top{flex-direction:column;gap:4px;}
   .contact-wrap{gap:26px;}
   #backToTop{bottom:18px;right:18px;width:40px;height:40px;font-size:17px;}
 }
