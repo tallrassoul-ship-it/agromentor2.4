@@ -801,6 +801,8 @@ function renderSidebar(mode){
     ['dashboard','🏠','Vue d\'ensemble'],
     ['profile','👤','Mon profil'],
     ['binome','🤝','Mon binôme'],
+    ['resources','📚','Ressources'],
+    ['saved','⭐','Enregistrés'],
     ['messages','💬','Messagerie'],
     ['notifications','🔔','Notifications'],
   ];
@@ -808,6 +810,7 @@ function renderSidebar(mode){
     ['admin-overview','📊','Statistiques'],
     ['admin-users','👥','Utilisateurs'],
     ['admin-binomes','🤝','Binômes'],
+    ['admin-resources','📚','Ressources'],
     ['admin-notifications','🔔','Notifications'],
   ];
   const links = mode==='admin'? adminLinks : userLinks;
@@ -1221,6 +1224,119 @@ async function deleteBinome(id){
     await saveKey('binomes'); toast("Binôme supprimé.");
     renderBinomeTable();
   });
+}
+function renderAdminResources(){
+  document.getElementById('appContent').innerHTML = `<div class="panel"><h3>Modération des ressources</h3><div id="modList"></div></div>`;
+  document.getElementById('modList').innerHTML = DB.resources.slice().reverse().map(r=>{
+    const author=findUser(r.author);
+    return `<div class="res-card">
+      <div class="res-top"><div><span class="res-type">${esc(r.type)}</span><h4 style="margin:4px 0;">${esc(r.title)}</h4>
+      <span style="font-size:12px;color:var(--ink-soft);">par ${author?esc(author.prenom+' '+author.nom):'—'} · ${r.hidden?'masquée':'visible'}</span></div></div>
+      <div class="res-actions">
+        <button onclick="toggleHideResource('${escAttr(r.id)}')">${r.hidden?'Ré-approuver':'Masquer'}</button>
+        <button onclick="deleteResource('${escAttr(r.id)}')">Supprimer</button>
+      </div>
+      <div class="comment-box">${(r.comments||[]).map((c,i)=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)} <button class="icon-btn" style="margin-left:8px;" onclick="deleteComment('${escAttr(r.id)}',${i})">Suppr.</button></div>`).join('')}</div>
+    </div>`;
+  }).join('') || '<p style="color:var(--ink-soft);">Aucune ressource.</p>';
+}
+async function toggleHideResource(id){
+  await withAdminLock(async () => {
+    const r=DB.resources.find(x=>x.id===id);
+    if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
+    r.hidden=!r.hidden;
+    await saveKey('resources'); renderAdminResources();
+  });
+}
+async function deleteResource(id){
+  await withAdminLock(async () => {
+    DB.resources = DB.resources.filter(r=>r.id!==id);
+    // Nettoyer les références saved chez tous les utilisateurs
+    DB.users.forEach(u=>{
+      if(u.saved) u.saved = u.saved.filter(sid=>sid!==id);
+    });
+    await saveKey('resources'); await saveKey('users');
+    toast("Ressource supprimée."); renderAdminResources();
+  });
+}
+async function deleteComment(id,idx){
+  await withAdminLock(async () => {
+    const r=DB.resources.find(x=>x.id===id);
+    if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
+    r.comments.splice(idx,1);
+    await saveKey('resources'); renderAdminResources();
+  });
+}
+
+/* ---------- ADMIN: notifications ---------- */
+function renderAdminNotifications(){
+  const list = [...DB.notifications].sort((a,b)=>b.ts-a.ts);
+  const unread = list.filter(n=>!n.read).length;
+  document.getElementById('appContent').innerHTML = `
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;">Notifications (${unread} non lues)</h3>
+        <button class="btn btn-ghost btn-sm" onclick="markAllNotificationsRead()">Tout marquer comme lu</button>
+      </div>
+      ${list.map(n=>{
+        const forUser = findUser(n.forEmail);
+        return `<div class="notif-item ${n.read?'read':''}">
+          <div class="notif-dot"></div>
+          <div style="flex:1;">
+            <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;">Pour : ${forUser? esc(forUser.prenom+' '+forUser.nom) : esc(n.forEmail)}</div>
+            <div>${esc(n.text)}</div>
+            <span style="font-size:11px;color:var(--ink-soft);">${new Date(n.ts).toLocaleString('fr-FR')}</span>
+          </div>
+        </div>`;
+      }).join('') || '<p style="color:var(--ink-soft);">Aucune notification.</p>'}
+    </div>`;
+}
+async function markAllNotificationsRead(){
+  // Ne marquer que les notifications destinées à l'admin (utilisateur actuel)
+  DB.notifications.forEach(n=>{ if(n.forEmail===ADMIN_EMAIL) n.read=true; });
+  await saveKey('notifications');
+  toast("Toutes vos notifications marquées comme lues.");
+  renderAdminNotifications();
+}
+
+/* ============================================================
+   DEEP LINK
+   ============================================================ */
+function handleDeepLink(){
+  // Deep link désactivé (plus de ressources)
+}
+
+/* ============================================================
+   SHOWCASE (public sponsors/sponsees preview)
+   ============================================================ */
+function renderShowcase(){
+  const sponsors = DB.users.filter(u=>u.role==='parrain' && u.status==='actif').slice(0,3);
+  const sponsees = DB.users.filter(u=>u.role==='filleul' && u.status==='actif').slice(0,3);
+  const demo = (list, roleLabel, domains) => (list.length? list : domains.map((d,i)=>({prenom:'Étudiant',nom:(i+1)+'',domaine:d,niveau:['Licence 3','Master 1','Master 2'][i]})))
+    .map(u=>`<div class="people-card reveal"><div class="avatar">${initials((u.prenom||'')+' '+(u.nom||''))}</div><h4>${esc(u.prenom)} ${esc(u.nom)}</h4><span>${esc(u.niveau||'')}</span><br><span class="tag">${esc(u.domaine||roleLabel)}</span></div>`).join('');
+  const sponsorEl = document.getElementById('sponsorShowcase');
+  const sponseeEl = document.getElementById('sponseeShowcase');
+  if(sponsorEl) sponsorEl.innerHTML = demo(sponsors,'Parrain',['Agronomie','Nutrition','Agroalimentaire']);
+  if(sponseeEl) sponseeEl.innerHTML = demo(sponsees,'Filleul',['Productions végétales','Recherche scientifique','Développement durable']);
+  // Re-observe new reveal elements
+  document.querySelectorAll('.reveal:not(.revealed)').forEach(el=>revealObserver.observe(el));
+}
+
+/* ============================================================
+   SYNC
+   ============================================================ */
+async function syncOnlineData() {
+  try {
+    toast("Mise à jour des données depuis le Cloud...","Synchronisation");
+    await loadDB();
+    toast("Données synchronisées avec succès !","Terminé");
+    // Re-render current view (stay on same page)
+    const u = me();
+    if(u) originalGoto(currentView);
+  } catch (error) {
+    console.error("Erreur de synchronisation :", error);
+    toast("Impossible de synchroniser les données.","Erreur");
+  }
 }
 
 // Auto-refresh every 30s
