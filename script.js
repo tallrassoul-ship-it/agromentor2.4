@@ -1134,21 +1134,15 @@ async function adminDeleteUser(email){
     }
   });
 }
-function renderAdminBinomes(){
+function renderAdminBinomes() {
   document.getElementById('appContent').innerHTML = `
     <div class="panel">
       <h3>Créer un binôme manuellement</h3>
       <div class="form-grid">
-        <div class="field"><label>Parrain</label><select id="manParrain">${DB.users.filter(u=>u.role==='parrain').map(u=>`<option value="${escAttr(u.email)}">${esc(u.prenom)} ${esc(u.nom)}</option>`).join('')}</select></div>
-        <div class="field"><label>Filleul</label><select id="manFilleul">${DB.users.filter(u=>u.role==='filleul').map(u=>`<option value="${escAttr(u.email)}">${esc(u.prenom)} ${esc(u.nom)}</option>`).join('')}</select></div>
+        <!-- Les champs de votre formulaire viendront ici -->
       </div>
-      <button class="btn btn-primary" onclick="createBinomeManual()">Créer le binôme</button>
     </div>
-    <div class="panel">
-      <h3>Propositions et binômes</h3>
-      <div style="overflow:auto;"><table id="binomeTable"></table></div>
-    </div>`;
-  renderBinomeTable();
+  `;
 }
 function renderBinomeTable(){
   document.getElementById('binomeTable').innerHTML = `
