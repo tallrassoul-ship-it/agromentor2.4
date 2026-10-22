@@ -642,116 +642,147 @@ async function finishRegister(){
   }
 }
 
-/* ---------- enhanced compatibility auto-match ---------- */
+/* ---------- compatibility score: normalized to exactly 100 points ---------- */
+const COMPATIBILITY_WEIGHTS = Object.freeze({
+  interests: 15,
+  activities: 10,
+  city: 15,
+  personality: 10,
+  domain: 15,
+  availability: 10,
+  experience: 10,
+  skills: 5,
+  objectives: 5,
+  gender: 5
+});
+
+function clampPercentage(value){
+  const number = Number(value);
+  if(!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function normalizeMatchValue(value){
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function exactMatchRatio(valueA, valueB){
+  const a = normalizeMatchValue(valueA);
+  const b = normalizeMatchValue(valueB);
+  return a && b && a === b ? 1 : 0;
+}
+
+function listSimilarity(listA, listB){
+  const a = new Set((Array.isArray(listA) ? listA : []).map(normalizeMatchValue).filter(Boolean));
+  const b = new Set((Array.isArray(listB) ? listB : []).map(normalizeMatchValue).filter(Boolean));
+  if(!a.size || !b.size) return 0;
+  let intersection = 0;
+  a.forEach(item=>{ if(b.has(item)) intersection++; });
+  const union = new Set([...a, ...b]).size;
+  return union ? intersection / union : 0;
+}
+
+function personalitySimilarity(valueA, valueB){
+  const a = normalizeMatchValue(valueA);
+  const b = normalizeMatchValue(valueB);
+  if(!a || !b) return 0;
+  if(a === b) return 1;
+  return a.includes('ambivert') || b.includes('ambivert') ? 0.5 : 0;
+}
+
+function experienceSimilarity(valueA, valueB){
+  const levels = ['debutant', 'intermediaire', 'avance'];
+  const indexA = levels.indexOf(normalizeMatchValue(valueA));
+  const indexB = levels.indexOf(normalizeMatchValue(valueB));
+  if(indexA < 0 || indexB < 0) return 0;
+  const difference = Math.abs(indexA - indexB);
+  return difference === 0 ? 1 : difference === 1 ? 0.5 : 0;
+}
+
+function matchTextSimilarity(textA, textB){
+  const tokenize = text => new Set(
+    normalizeMatchValue(text)
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word=>word.length >= 3)
+  );
+  const wordsA = tokenize(textA);
+  const wordsB = tokenize(textB);
+  if(!wordsA.size || !wordsB.size) return 0;
+  let intersection = 0;
+  wordsA.forEach(word=>{ if(wordsB.has(word)) intersection++; });
+  const union = new Set([...wordsA, ...wordsB]).size;
+  return union ? intersection / union : 0;
+}
+
+function calculateCompatibility(userA, userB){
+  if(!userA || !userB) return 0;
+
+  const ratios = {
+    interests: listSimilarity(userA.interests, userB.interests),
+    activities: listSimilarity(userA.activities, userB.activities),
+    city: exactMatchRatio(userA.ville, userB.ville),
+    personality: personalitySimilarity(userA.perso, userB.perso),
+    domain: exactMatchRatio(userA.domaine, userB.domaine),
+    availability: exactMatchRatio(userA.dispo, userB.dispo),
+    experience: experienceSimilarity(userA.exp, userB.exp),
+    skills: matchTextSimilarity(userA.competences, userB.competences),
+    objectives: matchTextSimilarity(userA.objectifs, userB.objectifs),
+    gender: exactMatchRatio(userA.sexe, userB.sexe)
+  };
+
+  const score = Object.entries(COMPATIBILITY_WEIGHTS)
+    .reduce((total, [criterion, weight]) => total + ratios[criterion] * weight, 0);
+
+  return clampPercentage(score);
+}
+
+function getBinomeCompatibility(binome){
+  if(!binome) return 0;
+  const parrain = findUser(binome.parrainEmail);
+  const filleul = findUser(binome.filleulEmail);
+  return parrain && filleul
+    ? calculateCompatibility(parrain, filleul)
+    : clampPercentage(binome.compat);
+}
+
 async function tryAutoMatch(user){
   const oppRole = user.role==='parrain' ? 'filleul' : 'parrain';
-  const candidates = DB.users.filter(u=>u.role===oppRole && u.status==='actif' &&
-    !DB.binomes.some(b=> (b.parrainEmail===u.email||b.filleulEmail===u.email) && b.status!=='refusé'));
+  const candidates = DB.users.filter(candidate=>
+    candidate.role === oppRole &&
+    candidate.status === 'actif' &&
+    !DB.binomes.some(binome=>(binome.parrainEmail===candidate.email || binome.filleulEmail===candidate.email) && binome.status!=='refusé')
+  );
   if(!candidates.length) return;
-  let best=null, bestScore=-1;
-  candidates.forEach(c=>{
-    let score = 0;
 
-    // 1. Centres d'intérêt communs (+10 par intérêt partagé)
-    const sharedInterests = (c.interests||[]).filter(i=>(user.interests||[]).includes(i)).length;
-    score += sharedInterests * 10;
-
-    // 2. Activités partagées (+10 par activité partagée)
-    const sharedAct = (c.activities||[]).filter(i=>(user.activities||[]).includes(i)).length;
-    score += sharedAct * 10;
-
-    // 3. Même ville de résidence (+30)
-    if(c.ville && user.ville && c.ville.toLowerCase().trim() === user.ville.toLowerCase().trim()){
-      score += 30;
+  let best = null;
+  let bestScore = -1;
+  candidates.forEach(candidate=>{
+    const score = calculateCompatibility(user, candidate);
+    if(score > bestScore){
+      best = candidate;
+      bestScore = score;
     }
-
-    // 4. Personnalité identique (+20)
-    if(c.perso && user.perso){
-      if(c.perso === user.perso){
-        score += 20;
-      } else {
-        // Personnalité compatible : Ambivert(e) avec tout le monde (+10)
-        if(c.perso.includes('Ambivert') || user.perso.includes('Ambivert')) score += 10;
-      }
-    }
-
-    // 5. Domaine préféré identique (+15)
-    if(c.domaine && user.domaine && c.domaine.toLowerCase() === user.domaine.toLowerCase()){
-      score += 15;
-    }
-
-    // 6. Disponibilités identiques (+10)
-    if(c.dispo && user.dispo && c.dispo === user.dispo){
-      score += 10;
-    }
-
-    // 7. Expérience identique (+10) ou adjacente (+5)
-    if(c.exp && user.exp){
-      const expLevels = ['Débutant','Intermédiaire','Avancé'];
-      const idxA = expLevels.indexOf(c.exp);
-      const idxB = expLevels.indexOf(user.exp);
-      if(idxA >= 0 && idxB >= 0){
-        const diff = Math.abs(idxA - idxB);
-        if(diff === 0) score += 10;
-        else if(diff === 1) score += 5;
-      }
-    }
-
-    // 8. Compétences (correspondance partielle de mots-clés, jusqu'à +10)
-    if(c.competences && user.competences){
-      const compScore = matchTextSimilarity(c.competences, user.competences) * 10;
-      score += compScore;
-    }
-
-    // 9. Objectifs académiques (correspondance partielle, jusqu'à +10)
-    if(c.objectifs && user.objectifs){
-      const objScore = matchTextSimilarity(c.objectifs, user.objectifs) * 10;
-      score += objScore;
-    }
-
-    // 10. Même sexe (+10)
-    if(c.sexe && user.sexe && c.sexe === user.sexe){
-      score += 10;
-    }
-
-    if(score>bestScore){ bestScore=score; best=c; }
   });
   if(!best) return;
-  const compat = Math.min(98, 40+bestScore);
+
   const binome = {
-    id:uid(),
-    parrainEmail: user.role==='parrain'? user.email : best.email,
-    filleulEmail: user.role==='filleul'? user.email : best.email,
-    status:'proposé', compat, createdAt:Date.now()
+    id: uid(),
+    parrainEmail: user.role==='parrain' ? user.email : best.email,
+    filleulEmail: user.role==='filleul' ? user.email : best.email,
+    status: 'proposé',
+    compat: clampPercentage(bestScore),
+    createdAt: Date.now()
   };
   DB.binomes.push(binome);
   await saveKey('binomes');
   await notify(binome.parrainEmail, "Un binôme vous a été proposé automatiquement, en attente de validation.");
   await notify(binome.filleulEmail, "Un binôme vous a été proposé automatiquement, en attente de validation.");
   await notify(ADMIN_EMAIL, "Nouvelle proposition de binôme en attente de validation.");
-}
-
-/* ---------- helpers for compatibility matching ---------- */
-function calcAge(dob){
-  if(!dob) return null;
-  const birth = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if(m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age > 0 && age < 120 ? age : null;
-}
-
-function matchTextSimilarity(textA, textB){
-  if(!textA || !textB) return 0;
-  // Extraire les mots significatifs (min 3 caractères, en minuscules)
-  const wordsA = new Set(textA.toLowerCase().replace(/[^a-zà-ÿ0-9\s]/g,' ').split(/\s+/).filter(w=>w.length>=3));
-  const wordsB = new Set(textB.toLowerCase().replace(/[^a-zà-ÿ0-9\s]/g,' ').split(/\s+/).filter(w=>w.length>=3));
-  if(wordsA.size === 0 || wordsB.size === 0) return 0;
-  let matches = 0;
-  wordsA.forEach(w=>{ if(wordsB.has(w)) matches++; });
-  // Retourne un score entre 0 et 1
-  return matches / Math.max(wordsA.size, wordsB.size);
 }
 
 /* ============================================================
@@ -853,7 +884,7 @@ function binomeSummaryHTML(u){
     const otherEmail = valid.parrainEmail===u.email? valid.filleulEmail: valid.parrainEmail;
     const other = findUser(otherEmail);
     return `<div style="display:flex;align-items:center;gap:14px;"><div class="avatar" style="width:52px;height:52px;font-size:16px;">${initials(other?.prenom+' '+other?.nom)}</div>
-      <div><b>${esc(other?.prenom)} ${esc(other?.nom)}</b><br><span class="badge ok">Binôme validé · ${valid.compat}% compatibilité</span></div></div>`;
+      <div><b>${esc(other?.prenom)} ${esc(other?.nom)}</b><br><span class="badge ok">Binôme validé · ${getBinomeCompatibility(valid)}% compatibilité</span></div></div>`;
   }
   if(pending){
     const otherEmail = pending.parrainEmail===u.email? pending.filleulEmail: pending.parrainEmail;
@@ -863,7 +894,7 @@ function binomeSummaryHTML(u){
       <div>
         <b>${other ? esc(other.prenom)+' '+esc(other.nom) : 'Étudiant proposé'}</b><br>
         <span style="font-size:12px;color:var(--ink-soft);">${other ? esc(other.niveau||'')+' · '+esc(other.domaine||'') : ''}</span><br>
-        <span class="badge wait">⏳ En attente de validation par l'administrateur · ${pending.compat}% compatibilité</span>
+        <span class="badge wait">⏳ En attente de validation par l'administrateur · ${getBinomeCompatibility(pending)}% compatibilité</span>
       </div>
     </div>`;
   }
@@ -1037,7 +1068,10 @@ function renderAdminOverview(){
   const nbParrains = DB.users.filter(u=>u.role==='parrain').length;
   const nbFilleuls = DB.users.filter(u=>u.role==='filleul').length;
   const actifs = DB.binomes.filter(b=>b.status==='validé').length;
-  const avgCompat = DB.binomes.length? Math.round(DB.binomes.reduce((s,b)=>s+(b.compat||0),0)/DB.binomes.length) : 0;
+  const measuredBinomes = DB.binomes.filter(b=>b.status!=='refusé');
+  const avgCompat = measuredBinomes.length
+    ? clampPercentage(measuredBinomes.reduce((sum,b)=>sum+getBinomeCompatibility(b),0)/measuredBinomes.length)
+    : 0;
 
   const activeUsers = DB.users.filter(u=>u.status==='actif' && u.role!=='admin').length;
   const newSignups = DB.users.filter(u=>u.createdAt && (Date.now()-u.createdAt)<7*86400000).length;
@@ -1165,7 +1199,7 @@ function renderBinomeTable(){
       return `<tr>
         <td>${p? esc(p.prenom+' '+p.nom) : '<em style="color:#999">'+esc(b.parrainEmail)+'</em>'}</td>
         <td>${f? esc(f.prenom+' '+f.nom) : '<em style="color:#999">'+esc(b.filleulEmail)+'</em>'}</td>
-        <td>${b.compat||'—'}%</td>
+        <td>${getBinomeCompatibility(b)}%</td>
         <td><span class="badge ${badgeClass}">${b.status}</span></td>
         <td class="row-actions">
           ${b.status!=='validé'? `<button class="icon-btn" onclick="setBinomeStatus('${escAttr(b.id)}','validé')">Accepter</button>`:''}
@@ -1187,7 +1221,10 @@ async function createBinomeManual(){
     const filleulBusy = DB.binomes.some(b=>b.filleulEmail===filleulEmail && b.status!=='refusé');
     if(parrainBusy){ const p=findUser(parrainEmail); toast(`${p?.prenom} ${p?.nom} est déjà dans un binôme actif.`); return; }
     if(filleulBusy){ const f=findUser(filleulEmail); toast(`${f?.prenom} ${f?.nom} est déjà dans un binôme actif.`); return; }
-    DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat:100, createdAt:Date.now(), manual:true});
+    const parrain = findUser(parrainEmail);
+    const filleul = findUser(filleulEmail);
+    const compat = calculateCompatibility(parrain, filleul);
+    DB.binomes.push({id:uid(), parrainEmail, filleulEmail, status:'validé', compat, createdAt:Date.now(), manual:true});
     await saveKey('binomes');
     await notify(parrainEmail,"Un binôme a été créé manuellement par l'administrateur.");
     await notify(filleulEmail,"Un binôme a été créé manuellement par l'administrateur.");
@@ -1347,7 +1384,7 @@ window.debugAgroMentor = async function(){
   DB.binomes.forEach((b,i)=>{
     const p = findUser(b.parrainEmail);
     const f = findUser(b.filleulEmail);
-    console.log(`  [${i}] ${p?p.prenom+' '+p.nom:b.parrainEmail} ↔ ${f?f.prenom+' '+f.nom:b.filleulEmail} | statut: ${b.status} | compat: ${b.compat}%`);
+    console.log(`  [${i}] ${p?p.prenom+' '+p.nom:b.parrainEmail} ↔ ${f?f.prenom+' '+f.nom:b.filleulEmail} | statut: ${b.status} | compat: ${getBinomeCompatibility(b)}%`);
   });
   console.log('--- Parrains ---');
   DB.users.filter(u=>u.role==='parrain').forEach(u=>console.log(`  - ${u.prenom} ${u.nom} (${u.email})`));
