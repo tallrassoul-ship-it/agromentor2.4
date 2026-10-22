@@ -874,7 +874,18 @@ function binomeSummaryHTML(u){
     return `<div style="display:flex;align-items:center;gap:14px;"><div class="avatar" style="width:52px;height:52px;font-size:16px;">${initials(other?.prenom+' '+other?.nom)}</div>
       <div><b>${esc(other?.prenom)} ${esc(other?.nom)}</b><br><span class="badge ok">Binôme validé · ${valid.compat}% compatibilité</span></div></div>`;
   }
-  if(pending) return `<span class="badge wait">En attente de validation par l'administrateur (compatibilité estimée ${pending.compat}%)</span>`;
+  if(pending){
+    const otherEmail = pending.parrainEmail===u.email? pending.filleulEmail: pending.parrainEmail;
+    const other = findUser(otherEmail);
+    return `<div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--leaf-soft);border-radius:12px;">
+      <div class="avatar" style="width:52px;height:52px;font-size:16px;background:linear-gradient(135deg,#ffb74d,#ff9800);">${initials(other?.prenom+' '+other?.nom)}</div>
+      <div>
+        <b>${other ? esc(other.prenom)+' '+esc(other.nom) : 'Étudiant proposé'}</b><br>
+        <span style="font-size:12px;color:var(--ink-soft);">${other ? esc(other.niveau||'')+' · '+esc(other.domaine||'') : ''}</span><br>
+        <span class="badge wait">⏳ En attente de validation par l'administrateur · ${pending.compat}% compatibilité</span>
+      </div>
+    </div>`;
+  }
   return `<p style="color:var(--ink-soft);font-size:14px;">Aucune proposition pour le moment. Complétez votre profil pour améliorer votre compatibilité.</p>`;
 }
 
@@ -1144,14 +1155,18 @@ function renderAdminBinomes() {
   `;
 }
 function renderBinomeTable(){
+  if(!DB.binomes || DB.binomes.length === 0){
+    document.getElementById('binomeTable').innerHTML = `<tr><td colspan="5" style="color:var(--ink-soft);text-align:center;padding:20px;">Aucun binôme dans le système. Les binômes apparaîtront ici après l'inscription d'un parrain et d'un filleul.</td></tr>`;
+    return;
+  }
   document.getElementById('binomeTable').innerHTML = `
     <tr><th>Parrain</th><th>Filleul</th><th>Compat.</th><th>Statut</th><th>Actions</th></tr>
     ${DB.binomes.map(b=>{
       const p=findUser(b.parrainEmail), f=findUser(b.filleulEmail);
       const badgeClass = b.status==='validé'?'ok':b.status==='refusé'?'no':'wait';
       return `<tr>
-        <td>${p? esc(p.prenom+' '+p.nom) : '—'}</td>
-        <td>${f? esc(f.prenom+' '+f.nom) : '—'}</td>
+        <td>${p? esc(p.prenom+' '+p.nom) : '<em style="color:#999">'+esc(b.parrainEmail)+'</em>'}</td>
+        <td>${f? esc(f.prenom+' '+f.nom) : '<em style="color:#999">'+esc(b.filleulEmail)+'</em>'}</td>
         <td>${b.compat||'—'}%</td>
         <td><span class="badge ${badgeClass}">${b.status}</span></td>
         <td class="row-actions">
@@ -1161,7 +1176,7 @@ function renderBinomeTable(){
           <button class="icon-btn" onclick="deleteBinome('${escAttr(b.id)}')">Supprimer</button>
         </td>
       </tr>`;
-    }).join('') || '<tr><td colspan="5" style="color:var(--ink-soft);">Aucun binôme.</td></tr>'}`;
+    }).join('')}`;
 }
 async function createBinomeManual(){
   await withAdminLock(async () => {
@@ -1322,6 +1337,26 @@ function stopAutoRefresh(){
     autoRefreshInterval = null;
   }
 }
+
+/* ============================================================
+   DEBUG: fonction de diagnostic accessible depuis la console
+   ============================================================ */
+window.debugAgroMentor = async function(){
+  console.log('=== 🔍 DIAGNOSTIC AGROMENTOR ===');
+  console.log('DB complet:', JSON.parse(JSON.stringify(DB)));
+  console.log('SESSION:', SESSION);
+  console.log('--- Binômes ---');
+  DB.binomes.forEach((b,i)=>{
+    const p = findUser(b.parrainEmail);
+    const f = findUser(b.filleulEmail);
+    console.log(`  [${i}] ${p?p.prenom+' '+p.nom:b.parrainEmail} ↔ ${f?f.prenom+' '+f.nom:b.filleulEmail} | statut: ${b.status} | compat: ${b.compat}%`);
+  });
+  console.log('--- Parrains ---');
+  DB.users.filter(u=>u.role==='parrain').forEach(u=>console.log(`  - ${u.prenom} ${u.nom} (${u.email})`));
+  console.log('--- Filleuls ---');
+  DB.users.filter(u=>u.role==='filleul').forEach(u=>console.log(`  - ${u.prenom} ${u.nom} (${u.email})`));
+  console.log('=== FIN DIAGNOSTIC ===');
+};
 
 /* ============================================================
    INIT
