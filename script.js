@@ -106,7 +106,9 @@ async function saveDB(key) {
 
 /* ---------- storage helpers ---------- */
 async function loadDB(){
-  const savedSession = SESSION; // Toujours préserver la session en mémoire
+  const savedSession = SESSION;
+  // Tracker si on a déjà chargé des données non-vides depuis le cloud
+  if(!window._firstLoadDone) window._firstLoadDone = {};
   for(const key of Object.keys(DB)){
     try{
       const r = await window.storage.get('am_'+key, true);
@@ -801,8 +803,6 @@ function renderSidebar(mode){
     ['dashboard','🏠','Vue d\'ensemble'],
     ['profile','👤','Mon profil'],
     ['binome','🤝','Mon binôme'],
-    ['resources','📚','Ressources'],
-    ['saved','⭐','Enregistrés'],
     ['messages','💬','Messagerie'],
     ['notifications','🔔','Notifications'],
   ];
@@ -810,7 +810,6 @@ function renderSidebar(mode){
     ['admin-overview','📊','Statistiques'],
     ['admin-users','👥','Utilisateurs'],
     ['admin-binomes','🤝','Binômes'],
-    ['admin-resources','📚','Ressources'],
     ['admin-notifications','🔔','Notifications'],
   ];
   const links = mode==='admin'? adminLinks : userLinks;
@@ -1217,48 +1216,6 @@ async function deleteBinome(id){
     DB.binomes = DB.binomes.filter(b=>b.id!==id);
     await saveKey('binomes'); toast("Binôme supprimé.");
     renderBinomeTable();
-  });
-}
-function renderAdminResources(){
-  document.getElementById('appContent').innerHTML = `<div class="panel"><h3>Modération des ressources</h3><div id="modList"></div></div>`;
-  document.getElementById('modList').innerHTML = DB.resources.slice().reverse().map(r=>{
-    const author=findUser(r.author);
-    return `<div class="res-card">
-      <div class="res-top"><div><span class="res-type">${esc(r.type)}</span><h4 style="margin:4px 0;">${esc(r.title)}</h4>
-      <span style="font-size:12px;color:var(--ink-soft);">par ${author?esc(author.prenom+' '+author.nom):'—'} · ${r.hidden?'masquée':'visible'}</span></div></div>
-      <div class="res-actions">
-        <button onclick="toggleHideResource('${escAttr(r.id)}')">${r.hidden?'Ré-approuver':'Masquer'}</button>
-        <button onclick="deleteResource('${escAttr(r.id)}')">Supprimer</button>
-      </div>
-      <div class="comment-box">${(r.comments||[]).map((c,i)=>`<div class="comment-line"><b>${esc(c.author)}:</b> ${esc(c.text)} <button class="icon-btn" style="margin-left:8px;" onclick="deleteComment('${escAttr(r.id)}',${i})">Suppr.</button></div>`).join('')}</div>
-    </div>`;
-  }).join('') || '<p style="color:var(--ink-soft);">Aucune ressource.</p>';
-}
-async function toggleHideResource(id){
-  await withAdminLock(async () => {
-    const r=DB.resources.find(x=>x.id===id);
-    if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
-    r.hidden=!r.hidden;
-    await saveKey('resources'); renderAdminResources();
-  });
-}
-async function deleteResource(id){
-  await withAdminLock(async () => {
-    DB.resources = DB.resources.filter(r=>r.id!==id);
-    // Nettoyer les références saved chez tous les utilisateurs
-    DB.users.forEach(u=>{
-      if(u.saved) u.saved = u.saved.filter(sid=>sid!==id);
-    });
-    await saveKey('resources'); await saveKey('users');
-    toast("Ressource supprimée."); renderAdminResources();
-  });
-}
-async function deleteComment(id,idx){
-  await withAdminLock(async () => {
-    const r=DB.resources.find(x=>x.id===id);
-    if(!r){ toast("Ressource introuvable (peut-être supprimée)."); renderAdminResources(); return; }
-    r.comments.splice(idx,1);
-    await saveKey('resources'); renderAdminResources();
   });
 }
 
