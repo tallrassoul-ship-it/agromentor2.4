@@ -545,7 +545,7 @@ function checkPassStrength(){
   if(/[^A-Za-z0-9]/.test(pass)) strength++;
   const pct = (strength/5)*100;
   fill.style.width = pct+'%';
-  fill.style.background = pct < 40 ? '#2e7d32' : pct < 70 ? '#4caf50' : '#2F6B45';
+  fill.style.background = pct < 40 ? '#c62828' : pct < 70 ? '#0047AB' : '#BFFF00';
 }
 function toggleChip(el,field,val){
   el.classList.toggle('sel');
