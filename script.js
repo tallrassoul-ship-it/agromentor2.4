@@ -629,6 +629,8 @@ async function finishRegister(){
     await saveKey('users');
     await tryAutoMatch(user);
     await notify(ADMIN_EMAIL, `Nouveau compte créé : ${user.prenom} ${user.nom} (${user.role}).`);
+    // Forcer la propagation immédiate sur tous les navigateurs connectés
+    await new Promise(r => setTimeout(r, 500)); // Petit délai pour laisser Firebase propager
     SESSION=user.email; await saveSession();
     closeAuth();
     toast("Bienvenue sur AgroMentor ! Votre profil est enregistré.","Compte créé");
@@ -818,9 +820,10 @@ function renderSidebar(mode){
     ['messages','💬','Messagerie'],
     ['notifications','🔔','Notifications'],
   ];
+  const nbUsers = DB.users.filter(x=>x.role!=='admin').length;
   const adminLinks = [
     ['admin-overview','📊','Statistiques'],
-    ['admin-users','👥','Utilisateurs'],
+    ['admin-users','👥','Utilisateurs ('+nbUsers+')'],
     ['admin-binomes','🤝','Binômes'],
     ['admin-notifications','🔔','Notifications'],
   ];
@@ -1100,23 +1103,31 @@ function renderAdminOverview(){
     </div>`;
 }
 function renderAdminUsers(){
-  document.getElementById('appContent').innerHTML = `
-    <div class="panel">
-      <h3>Utilisateurs</h3>
-      <input placeholder="Rechercher un utilisateur..." id="userSearch" style="margin-bottom:14px;" oninput="filterUsers()">
-      <div style="overflow:auto;"><table id="userTable"></table></div>
-    </div>`;
-  filterUsers();
+  // Forcer un refresh des données avant d'afficher
+  loadDB().then(() => {
+    document.getElementById('appContent').innerHTML = `
+      <div class="panel">
+        <h3>Utilisateurs (${DB.users.filter(u=>u.role!=='admin').length} inscrits)</h3>
+        <p style="color:var(--ink-soft);font-size:13px;margin-bottom:14px;">Total : ${DB.users.length} comptes · Parrains : ${DB.users.filter(u=>u.role==='parrain').length} · Filleuls : ${DB.users.filter(u=>u.role==='filleul').length}</p>
+        <input placeholder="Rechercher un utilisateur..." id="userSearch" style="margin-bottom:14px;" oninput="filterUsers()">
+        <div style="overflow:auto;"><table id="userTable"></table></div>
+      </div>`;
+    filterUsers();
+  });
 }
 function filterUsers(){
-  const q=(document.getElementById('userSearch')?.value||'').toLowerCase();
+  const searchEl = document.getElementById('userSearch');
+  const tableEl = document.getElementById('userTable');
+  if(!tableEl) return; // Table pas encore rendue
+  const q = searchEl ? searchEl.value.toLowerCase() : '';
   const list = DB.users.filter(u=>u.role!=='admin' && (u.nom+u.prenom+u.email).toLowerCase().includes(q));
-  document.getElementById('userTable').innerHTML = `
-    <tr><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr>
+  tableEl.innerHTML = `
+    <tr><th>Nom</th><th>Rôle</th><th>Statut</th><th>Inscrit le</th><th>Actions</th></tr>
     ${list.map(u=>`<tr>
       <td>${esc(u.prenom)} ${esc(u.nom)}<br><span style="color:var(--ink-soft);font-size:11.5px;">${esc(u.email)}</span></td>
       <td>${u.role==='parrain'?'Parrain':'Filleul'}</td>
       <td><span class="badge ${u.status==='actif'?'ok':'off'}">${u.status}</span></td>
+      <td style="font-size:12px;color:var(--ink-soft);">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR') : '—'}</td>
       <td class="row-actions">
         <button class="icon-btn" onclick="editUserPrompt('${escAttr(u.email)}')">Modifier</button>
         ${u.status==='actif'
@@ -1124,7 +1135,7 @@ function filterUsers(){
           : `<button class="icon-btn" onclick="toggleUserStatus('${escAttr(u.email)}','actif')">Réactiver</button>`}
         <button class="icon-btn" onclick="adminDeleteUser('${escAttr(u.email)}')">Supprimer</button>
       </td>
-    </tr>`).join('')}`;
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">Aucun utilisateur trouvé.</td></tr>'}`;
 }
 async function toggleUserStatus(email,status){
   await withAdminLock(async () => {
@@ -1346,21 +1357,33 @@ const originalGoto = goto;
 goto = function(view){ currentView = view; originalGoto(view); };
 
 let autoRefreshInterval = null;
+let previousUserCount = 0; // Pour détecter les nouveaux utilisateurs
 
 function startAutoRefresh(){
-  if(autoRefreshInterval) return; // Déjà démarré
+  if(autoRefreshInterval) return;
+  // Mémoriser le nombre d'utilisateurs au démarrage
+  previousUserCount = DB.users.length;
   autoRefreshInterval = setInterval(async () => {
     if(!SESSION){
-      // Pas de session, arrêter l'intervalle
       stopAutoRefresh();
       return;
     }
-    // Ne pas interrompre une saisie en cours (formulaire, chat, etc.)
     const active = document.activeElement;
     const isEditing = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
     if(isEditing) return;
+    
+    const oldUserCount = DB.users.length;
     await loadDB();
-    // Re-render current view silencieusement
+    
+    // Détecter les nouveaux utilisateurs
+    if(DB.users.length > oldUserCount){
+      const newCount = DB.users.length - oldUserCount;
+      toast(`${newCount} nouvel${newCount > 1 ? 's' : ''} utilisateur${newCount > 1 ? 's' : ''} inscrit${newCount > 1 ? 's' : ''} !`, "Mise à jour");
+      // Mettre à jour le sidebar pour refléter le nouveau compteur
+      const cu = me();
+      if(cu) renderSidebar(cu.role==='admin'?'admin':'user');
+    }
+    
     const u = me();
     if(u) originalGoto(currentView);
   }, 30000);
