@@ -273,33 +273,6 @@ if(faqListEl){
 }
 function toggleFaq(i){ document.getElementById('faq'+i)?.classList.toggle('open'); }
 
-let contactSending = false;
-let registering = false;
-
-async function submitContact(e){
-  e.preventDefault();
-  if(contactSending) return false;
-  contactSending = true;
-  const btn = e.target.querySelector('button[type="submit"]');
-  const originalText = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'Envoi en cours...'; }
-  try {
-    const name = document.getElementById('cName').value.trim();
-    const email = document.getElementById('cEmail').value.trim();
-    const subject = document.getElementById('cSubject').value;
-    const msg = document.getElementById('cMsg').value.trim();
-    await notify(ADMIN_EMAIL, ` Message de contact — ${name} (${email}) — Sujet : ${subject} — ${msg}`);
-    toast("Merci ! Votre message a été transmis à l'administration.","Message envoyé");
-    e.target.reset();
-  } catch(err) {
-    console.error("Erreur envoi contact:", err);
-    toast("Impossible d'envoyer le message. Vérifiez votre connexion.","Erreur");
-  } finally {
-    contactSending = false;
-    if(btn){ btn.disabled = false; btn.textContent = originalText; }
-  }
-  return false;
-}
 
 /* ============================================================
    FOOTER
@@ -337,9 +310,6 @@ const footerApp = document.getElementById('footer-app');
 if(footerPublic) footerPublic.innerHTML = footerHTML();
 if(footerApp) footerApp.innerHTML = footerHTML();
 
-/* ============================================================
-   SHARE
-   ============================================================ */
 function baseShareLink(){ return location.origin + location.pathname; }
 async function copyLink(link){
   try{ await navigator.clipboard.writeText(link); return true; }
@@ -1308,13 +1278,6 @@ async function markAllNotificationsRead(){
   await saveKey('notifications');
   toast("Toutes vos notifications marquées comme lues.");
   renderAdminNotifications();
-}
-
-/* ============================================================
-   DEEP LINK
-   ============================================================ */
-function handleDeepLink(){
-  // Deep link désactivé (plus de ressources)
 }
 
 /* ============================================================
