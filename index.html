@@ -40,26 +40,24 @@
 
   <nav class="nav" id="mainNav">
     <div class="nav-inner">
-      <div class="logo">AgroMentor</div>
+      <div class="logo"><span class="logo-mark-text">AM</span> AgroMentor</div>
       <div class="nav-links" id="navLinks">
         <a href="#hero" onclick="closeMobileNav()">Accueil</a>
         <a href="#about" onclick="closeMobileNav()">À propos</a>
-        <a href="#how" onclick="closeMobileNav()">Comment ça fonctionne</a>
+        <a href="#how" onclick="closeMobileNav()">Comment ça marche</a>
         <a href="#sponsors" onclick="closeMobileNav()">Parrains</a>
         <a href="#sponsees" onclick="closeMobileNav()">Filleuls</a>
         <a href="#faq" onclick="closeMobileNav()">FAQ</a>
         <div class="nav-actions-mobile">
-          <button class="btn btn-ghost btn-sm" onclick="openAdminLogin();closeMobileNav()"> Espace Admin</button>
-          <button class="btn btn-ghost btn-sm" onclick="openAuth('login');closeMobileNav()">Se connecter</button>
-          <button class="btn btn-primary btn-sm" onclick="openAuth('register');closeMobileNav()">S'inscrire</button>
+          <button class="btn btn-outline btn-sm" onclick="openAuth('login');closeMobileNav()">Connexion</button>
+          <button class="btn btn-primary btn-sm" onclick="openAuth('register');closeMobileNav()">Inscription</button>
         </div>
       </div>
       <div class="nav-actions nav-actions-desktop">
-        <button class="btn btn-ghost btn-sm" onclick="openAdminLogin()" title="Accès réservé à l'administrateur"> Admin</button>
-        <button class="btn btn-ghost btn-sm" onclick="openAuth('login')">Se connecter</button>
-        <button class="btn btn-primary btn-sm" onclick="openAuth('register')">S'inscrire</button>
+        <button class="btn btn-outline btn-sm" onclick="openAuth('login')">Connexion</button>
+        <button class="btn btn-primary btn-sm" onclick="openAuth('register')">Inscription</button>
       </div>
-      <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Menu"></button>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
     </div>
   </nav>
 
@@ -255,5 +253,5 @@
 
   startApp();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a557cc1e5fc4de3e',t:'MTc5MzgzOTEyNA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a557cc1e5fc4de3e',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
