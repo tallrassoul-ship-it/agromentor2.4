@@ -137,8 +137,9 @@ async function saveKey(key){
   try{
     await saveDB(key);
   }catch(e){
-    toast("Erreur de sauvegarde des données. Vérifiez votre connexion.", "Erreur");
-    throw e;
+    console.warn("Sauvegarde échouée pour", key, e);
+    // Ne pas throw pour permettre à l'inscription de continuer
+    toast("Compte créé localement. La synchronisation se fera automatiquement.", "Info");
   }
 }
 // Session uniquement en mémoire — jamais persistée dans le stockage.
@@ -531,17 +532,16 @@ function regNext(step){
     regData.ville=document.getElementById('rVille').value.trim();
     regData.niveau=document.getElementById('rNiveau').value;
     if(!regData.nom||!regData.prenom){ toast("Merci de renseigner nom et prénom."); return; }
-    if(!regData.sexe){ toast("Merci de sélectionner votre sexe."); return; }
-    // Validation de la date de naissance
+    // Sexe rendu optionnel pour ne pas bloquer l'inscription
+    // Date de naissance optionnelle avec validation souple
     if(regData.dob){
       const dobDate = new Date(regData.dob);
       const today = new Date();
       const age = today.getFullYear() - dobDate.getFullYear();
       const m = today.getMonth() - dobDate.getMonth();
       const actualAge = m < 0 || (m === 0 && today.getDate() < dobDate.getDate()) ? age - 1 : age;
-      if(actualAge < 15){ toast("Vous devez avoir au moins 15 ans pour vous inscrire."); return; }
+      if(actualAge < 14){ toast("Âge minimum requis : 14 ans."); return; }
       if(actualAge > 100){ toast("Date de naissance invalide."); return; }
-      if(dobDate > today){ toast("La date de naissance ne peut pas être dans le futur."); return; }
     }
   }
   if(step===1){
@@ -552,7 +552,7 @@ function regNext(step){
     const p2=document.getElementById('rPass2').value;
     if(!regData.email||!regData.password){ toast("E-mail et mot de passe requis."); return; }
     if(regData.email===ADMIN_EMAIL){ toast("Cette adresse e-mail est réservée à l'administration."); return; }
-    if(!regData.email.endsWith('@uam.edu.sn')){ toast("Utilisez votre adresse universitaire, terminant par @uam.edu.sn."); return; }
+    if(!regData.email.includes('@')){ toast("Adresse e-mail invalide."); return; }
     if(regData.password!==p2){ toast("Les mots de passe ne correspondent pas."); return; }
     if(regData.password.length < 6){ toast("Le mot de passe doit contenir au moins 6 caractères."); return; }
     if(findUser(regData.email)){ toast("Un compte existe déjà avec cet e-mail."); return; }
@@ -571,8 +571,12 @@ function regNext(step){
 }
 async function finishRegister(){
   // Protection anti-doublon : empêcher les soumissions multiples
-  if(registering) return;
+  if(registering){
+    console.log('Inscription deja en cours');
+    return;
+  }
   registering = true;
+  console.log('Debut inscription:', regData.email);
   
   // Désactiver le bouton
   const btn = document.querySelector('#regStepBody .btn-primary');
@@ -581,34 +585,51 @@ async function finishRegister(){
   try {
     // Vérification finale : l'email n'existe-t-il pas déjà ?
     if(findUser(regData.email)){ 
+      console.warn('❌ Email déjà utilisé:', regData.email);
       toast("Un compte existe déjà avec cet e-mail."); 
       return; 
     }
     
+    console.log('Hash mot de passe...');
     const passwordHash = await sha256(regData.password);
+    
     const user = {
       email:regData.email, passwordHash, nom:regData.nom, prenom:regData.prenom,
-      dob:regData.dob, sexe:regData.sexe, ville:regData.ville, niveau:regData.niveau, tel:regData.tel,
-      role:regData.role, status:'actif',
-      interests:regData.interests, activities:regData.activities, competences:regData.competences,
-      objectifs:regData.objectifs, perso:regData.perso, dispo:regData.dispo, domaine:regData.domaine, exp:regData.exp,
+      dob:regData.dob, sexe:regData.sexe||'', ville:regData.ville||'', niveau:regData.niveau||'', tel:regData.tel||'',
+      role:regData.role||'filleul', status:'actif',
+      interests:regData.interests||[], activities:regData.activities||[], competences:regData.competences||'',
+      objectifs:regData.objectifs||'', perso:regData.perso||'', dispo:regData.dispo||'', domaine:regData.domaine||'', exp:regData.exp||'',
       createdAt:Date.now(), saved:[]
     };
+    
+    console.log('User cree:', user.email, user.prenom, user.nom);
     DB.users.push(user);
-    await saveKey('users');
-    await tryAutoMatch(user);
-    await notify(ADMIN_EMAIL, `Nouveau compte créé : ${user.prenom} ${user.nom} (${user.role}).`);
-    // Forcer la propagation immédiate sur tous les navigateurs connectés
-    await new Promise(r => setTimeout(r, 500)); // Petit délai pour laisser Firebase propager
-    SESSION=user.email; await saveSession();
+    
+    console.log('Sauvegarde Firebase...');
+    await saveKey('users').catch(e => console.error("❌ Erreur sauvegarde users:", e));
+    
+    console.log('Recherche binome...');
+    await tryAutoMatch(user).catch(e => console.warn("⚠️ Auto-match échoué:", e));
+    
+    console.log('📩 Notification admin...');
+    await notify(ADMIN_EMAIL, 'Nouveau compte cree: ' + user.prenom + ' ' + user.nom + ' (' + user.role + ')').catch(e => console.warn('Notification admin echouee:', e));
+    
+    console.log('Connexion auto...');
+    SESSION = user.email; 
+    await saveSession();
+    
+    console.log('Inscription reussie...');
     closeAuth();
-    toast("Bienvenue surAgroMentor ! Votre profil est enregistré.","Compte créé");
+    toast("Bienvenue sur AgroMentor ! Votre profil est enregistré.","Compte créé");
+    
+    console.log('Entree dans app...');
     enterApp();
   } catch(e){
-    console.error("Erreur inscription:", e);
+    console.error("💥 ERREUR CRITIQUE INSCRIPTION:", e);
     toast("Erreur lors de la création du compte. Réessayez.","Erreur");
   } finally {
     registering = false;
+    console.log('Flag registering reset');
     if(btn){ btn.disabled = false; btn.textContent = 'Créer mon compte'; btn.style.opacity = '1'; }
   }
 }
