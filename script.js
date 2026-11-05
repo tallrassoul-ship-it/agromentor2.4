@@ -8,6 +8,8 @@ let SESSION = null;
 let currentChatWith = null;
 let regStep = 0;
 let regData = { interests:[], activities:[] };
+let registering = false;
+let contactSending = false;
 
 /* ---------- Constants (previously missing) ---------- */
 const INTERESTS = [
