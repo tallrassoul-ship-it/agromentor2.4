@@ -19,7 +19,7 @@
         return null;
       } catch (error) {
         console.error("Erreur de lecture Firebase:", error);
-        throw error;
+        return null;
       }
     },
 
