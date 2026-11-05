@@ -1,5 +1,5 @@
 /* ============================================================\
-   AgroMentor — Script principal (version améliorée)
+  AgroMentor — Script principal (version améliorée)
    ============================================================ */
 
 /* ---------- Data store ---------- */
@@ -19,7 +19,7 @@ const ACTIVITIES = [
   'Sport', 'Lecture', 'Bénévolat', 'Musique', 'Art',
   'Voyage', 'Jardinage', 'Cuisine', 'Photographie', 'Théâtre'
 ];
-const CREDIT_HTML = 'Conçu avec ❤️ par <b>AgroMentor</b>';
+const CREDIT_HTML = 'Conçu avec  par <b>AgroMentor</b>';
 
 // Anti-doublon pour les actions admin
 let adminActionInProgress = false;
@@ -257,7 +257,7 @@ document.querySelectorAll('.step-item').forEach(item=>{
    FAQ
    ============================================================ */
 const FAQS = [
-  ["Qui peut s'inscrire sur AgroMentor ?","La plateforme est exclusivement réservée aux étudiants du département STAAN, parrains comme filleuls."],
+  ["Qui peut s'inscrire surAgroMentor ?","La plateforme est exclusivement réservée aux étudiants du département STAAN, parrains comme filleuls."],
   ["Comment est choisi mon binôme ?","Un algorithme de compatibilité propose un binôme selon vos centres d'intérêt, disponibilités et objectifs. La proposition est ensuite validée, modifiée ou refusée par l'administrateur."],
   ["Puis-je changer de parrain ou de filleul ?","Oui, contactez l'administration : elle peut modifier ou recréer un binôme."],
   ["Mes données sont-elles protégées ?","Les mots de passe sont chiffrés et l'accès est protégé contre les injections SQL et les attaques XSS."],
@@ -288,7 +288,7 @@ async function submitContact(e){
     const email = document.getElementById('cEmail').value.trim();
     const subject = document.getElementById('cSubject').value;
     const msg = document.getElementById('cMsg').value.trim();
-    await notify(ADMIN_EMAIL, `📩 Message de contact — ${name} (${email}) — Sujet : ${subject} — ${msg}`);
+    await notify(ADMIN_EMAIL, ` Message de contact — ${name} (${email}) — Sujet : ${subject} — ${msg}`);
     toast("Merci ! Votre message a été transmis à l'administration.","Message envoyé");
     e.target.reset();
   } catch(err) {
@@ -310,24 +310,23 @@ function footerHTML(){
     <div class="container">
       <div class="foot-grid">
         <div>
-          <div class="logo" style="color:#fff;margin-bottom:10px;"><div class="logo-mark">🌱</div>AgroMentor</div>
+          <div class="logo" style="color:#fff;margin-bottom:10px;"><div class="logo-mark"></div>AgroMentor</div>
           <p>Plateforme de parrainage et de mentorat du département Sciences et Techniques Agro-Alimentaires et Nutritionnelles (STAAN).</p>
         </div>
         <div><h5>Département</h5>
-          <a href="#about">À propos</a><a href="#how">Comment ça fonctionne</a><a href="#contact">Coordonnées</a>
+          <a href="#about">À propos</a><a href="#how">Comment ça fonctionne</a>
         </div>
         <div><h5>Informations</h5>
           <a href="#faq">FAQ</a>
           <a href="#" onclick="event.preventDefault();toast('Politique de confidentialité disponible sur demande à l\\'administration.')">Politique de confidentialité</a>
           <a href="#" onclick="event.preventDefault();toast('Conditions d\\'utilisation disponibles sur demande à l\\'administration.')">Conditions d'utilisation</a>
         </div>
-        <div><h5>Contact</h5>
-          <a href="#contact">Formulaire de contact</a>
-          <a href="#" onclick="event.preventDefault();openAdminLogin();">🔐 Espace Admin</a>
+        <div><h5>Administration</h5>
+          <a href="#" onclick="event.preventDefault();openAdminLogin();">Espace Admin</a>
         </div>
       </div>
       <div class="foot-bottom">
-        <span>© ${new Date().getFullYear()} AgroMentor · Département STAAN</span>
+        <span>© ${new Date().getFullYear()}AgroMentor · Département STAAN</span>
         <span class="credit">${CREDIT_HTML}</span>
       </div>
     </div>
@@ -419,7 +418,7 @@ function closeAuth(){ document.getElementById('authOverlay').classList.remove('s
 
 function renderLogin(){
   document.getElementById('authModal').innerHTML = `
-    <div class="modal-head"><h3>Se connecter</h3><button class="close-x" onclick="closeAuth()">✕</button></div>
+    <div class="modal-head"><h3>Se connecter</h3><button class="close-x" onclick="closeAuth()">X</button></div>
     <form onsubmit="return doLogin(event)">
       <div class="field"><label>Adresse e-mail</label><input type="email" id="liEmail" required placeholder="prenom.nom@uam.edu.sn"></div>
       <div class="field"><label>Mot de passe</label><input type="password" id="liPass" required></div>
@@ -428,7 +427,7 @@ function renderLogin(){
         <a style="color:var(--cobalt);font-weight:600;cursor:pointer;" onclick="regStep=0;regData={interests:[],activities:[]};renderRegister()">S'inscrire</a></p>
     </form>`;
 }
-// ⚠️ SÉCURITÉ : Le hash ci-dessous est visible côté client (n'importe qui peut
+//  SÉCURITÉ : Le hash ci-dessous est visible côté client (n'importe qui peut
 // inspecter le code source). Pour une protection réelle, migrez vers
 // Firebase Authentication (https://firebase.google.com/docs/auth) ou un
 // backend dédié. Le hash SHA-256 simple reste vulnérable au cassage offline.
@@ -459,7 +458,7 @@ async function doLogin(e){
 function renderRegister(){
   const steps = ['Identité','Compte','Questionnaire','Confirmation'];
   document.getElementById('authModal').innerHTML = `
-    <div class="modal-head"><h3>Créer un compte</h3><button class="close-x" onclick="closeAuth()">✕</button></div>
+    <div class="modal-head"><h3>Créer un compte</h3><button class="close-x" onclick="closeAuth()">X</button></div>
     <div class="step-track">${steps.map((s,i)=>`<div class="${i<=regStep?'done':''}"></div>`).join('')}</div>
     <div id="regStepBody"></div>`;
   renderRegStep();
@@ -633,7 +632,7 @@ async function finishRegister(){
     await new Promise(r => setTimeout(r, 500)); // Petit délai pour laisser Firebase propager
     SESSION=user.email; await saveSession();
     closeAuth();
-    toast("Bienvenue sur AgroMentor ! Votre profil est enregistré.","Compte créé");
+    toast("Bienvenue surAgroMentor ! Votre profil est enregistré.","Compte créé");
     enterApp();
   } catch(e){
     console.error("Erreur inscription:", e);
@@ -814,25 +813,25 @@ async function logout(){
 function renderSidebar(mode){
   const u=me();
   const userLinks = [
-    ['dashboard','🏠','Vue d\'ensemble'],
-    ['profile','👤','Mon profil'],
-    ['binome','🤝','Mon binôme'],
-    ['messages','💬','Messagerie'],
-    ['notifications','🔔','Notifications'],
+    ['dashboard','01','Vue d\'ensemble'],
+    ['profile','02','Mon profil'],
+    ['binome','03','Mon binôme'],
+    ['messages','04','Messagerie'],
+    ['notifications','05','Notifications'],
   ];
   const nbUsers = DB.users.filter(x=>x.role!=='admin').length;
   const adminLinks = [
-    ['admin-overview','📊','Statistiques'],
-    ['admin-users','👥','Utilisateurs ('+nbUsers+')'],
-    ['admin-binomes','🤝','Binômes'],
-    ['admin-notifications','🔔','Notifications'],
+    ['admin-overview','01','Statistiques'],
+    ['admin-users','02','Utilisateurs ('+nbUsers+')'],
+    ['admin-binomes','03','Binômes'],
+    ['admin-notifications','04','Notifications'],
   ];
   const links = mode==='admin'? adminLinks : userLinks;
   document.getElementById('sidebar').innerHTML = `
-    <div class="logo">🌱 AgroMentor</div>
+    <div class="logo">AgroMentor</div>
     ${links.map(l=>`<a class="side-link" id="side-${l[0]}" onclick="goto('${l[0]}')">${l[1]} ${l[2]}</a>`).join('')}
     <div class="side-bottom">
-      <div class="side-link" style="opacity:.8;cursor:default;">👤 ${esc(u.prenom)} ${esc(u.nom)}</div>
+      <div class="side-link" style="opacity:.8;cursor:default;"> ${esc(u.prenom)} ${esc(u.nom)}</div>
     </div>`;
 }
 const TITLES = {
@@ -968,7 +967,7 @@ async function changePassword(){
 }
 async function deleteMyAccount(){
   if(SESSION === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
-  if(!confirm("⚠️ Confirmer la suppression définitive de votre compte ? Cette action est irréversible.")) return;
+  if(!confirm(" Confirmer la suppression définitive de votre compte ? Cette action est irréversible.")) return;
   await removeUserCascade(SESSION);
   toast("Compte supprimé.");
   logout();
@@ -976,7 +975,7 @@ async function deleteMyAccount(){
 async function removeUserCascade(email){
   // Protection : ne jamais supprimer le compte admin via cette fonction
   if(email === ADMIN_EMAIL){
-    console.warn("⚠️ Tentative de suppression du compte admin bloquée.");
+    console.warn(" Tentative de suppression du compte admin bloquée.");
     toast("Le compte administrateur ne peut pas être supprimé.");
     return;
   }
@@ -1159,7 +1158,7 @@ async function adminDeleteUser(email){
     const user = findUser(email);
     if(!user){ toast("Utilisateur introuvable."); return; }
     if(email === ADMIN_EMAIL){ toast("Le compte administrateur ne peut pas être supprimé."); return; }
-    if(!confirm(`⚠️ Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
+    if(!confirm(` Supprimer définitivement ${user.prenom} ${user.nom} ?\n\n- Son compte sera supprimé\n- Ses binômes seront annulés\n- Ses messages seront supprimés\n\nCette action est irréversible.`)) return;
     try{
       await removeUserCascade(email);
       toast(`${user.prenom} ${user.nom} a été supprimé(e) avec toutes ses données.`, "Suppression réussie");
@@ -1400,7 +1399,7 @@ function stopAutoRefresh(){
    DEBUG: fonction de diagnostic accessible depuis la console
    ============================================================ */
 window.debugAgroMentor = async function(){
-  console.log('=== 🔍 DIAGNOSTIC AGROMENTOR ===');
+  console.log('=== DIAGNOSTIC AGROMENTOR ===');
   console.log('DB complet:', JSON.parse(JSON.stringify(DB)));
   console.log('SESSION:', SESSION);
   console.log('--- Binômes ---');
