@@ -310,7 +310,7 @@ function footerHTML(){
     <div class="container">
       <div class="foot-grid">
         <div>
-          <div class="logo" style="color:#fff;margin-bottom:10px;"><div class="logo-mark"></div>AgroMentor</div>
+          <div class="logo" style="color:#fff;margin-bottom:10px;"><span class="logo-mark-text">AM</span> AgroMentor</div>
           <p>Plateforme de parrainage et de mentorat du département Sciences et Techniques Agro-Alimentaires et Nutritionnelles (STAAN).</p>
         </div>
         <div><h5>Département</h5>
@@ -326,7 +326,7 @@ function footerHTML(){
         </div>
       </div>
       <div class="foot-bottom">
-        <span>© ${new Date().getFullYear()}AgroMentor · Département STAAN</span>
+        <span>© ${new Date().getFullYear()} AgroMentor · Département STAAN</span>
         <span class="credit">${CREDIT_HTML}</span>
       </div>
     </div>
@@ -828,7 +828,7 @@ function renderSidebar(mode){
   ];
   const links = mode==='admin'? adminLinks : userLinks;
   document.getElementById('sidebar').innerHTML = `
-    <div class="logo">AgroMentor</div>
+    <div class="logo"><span class="logo-mark-text" style="background:rgba(255,255,255,.15);color:#fff;">AM</span> AgroMentor</div>
     ${links.map(l=>`<a class="side-link" id="side-${l[0]}" onclick="goto('${l[0]}')">${l[1]} ${l[2]}</a>`).join('')}
     <div class="side-bottom">
       <div class="side-link" style="opacity:.8;cursor:default;"> ${esc(u.prenom)} ${esc(u.nom)}</div>
