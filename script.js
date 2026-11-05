@@ -232,13 +232,13 @@ function renderRings(active){
   <svg viewBox="0 0 400 400" width="100%" height="100%">
     ${[150,115,80,45].map((r,i)=>`
       <circle cx="200" cy="200" r="${r}" fill="none"
-        stroke="${i<=active? 'var(--green)':'var(--line)'}"
+        stroke="${i<=active? 'var(--cobalt)':'var(--line)'}"
         stroke-width="${i===active?4:2}"
         stroke-dasharray="${i===active? '4 0':'6 6'}"
         opacity="${i<=active?1:0.6}"
         style="transition:all .4s ease"/>
     `).join('')}
-    <circle cx="200" cy="200" r="20" fill="var(--green)" style="transition:all .3s"/>
+    <circle cx="200" cy="200" r="20" fill="var(--cobalt)" style="transition:all .3s"/>
     <text x="200" y="206" text-anchor="middle" font-family="Space Grotesk" font-weight="700" fill="#fff" font-size="15">0${active+1}</text>
   </svg>`;
   const ringsEl = document.getElementById('ringsSvg');
@@ -425,7 +425,7 @@ function renderLogin(){
       <div class="field"><label>Mot de passe</label><input type="password" id="liPass" required></div>
       <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
       <p style="text-align:center;font-size:13px;color:var(--ink-soft);margin-top:14px;">Pas encore de compte ?
-        <a style="color:var(--green);font-weight:600;cursor:pointer;" onclick="regStep=0;regData={interests:[],activities:[]};renderRegister()">S'inscrire</a></p>
+        <a style="color:var(--cobalt);font-weight:600;cursor:pointer;" onclick="regStep=0;regData={interests:[],activities:[]};renderRegister()">S'inscrire</a></p>
     </form>`;
 }
 // ⚠️ SÉCURITÉ : Le hash ci-dessous est visible côté client (n'importe qui peut
@@ -545,7 +545,7 @@ function checkPassStrength(){
   if(/[^A-Za-z0-9]/.test(pass)) strength++;
   const pct = (strength/5)*100;
   fill.style.width = pct+'%';
-  fill.style.background = pct < 40 ? '#c62828' : pct < 70 ? '#0047AB' : '#BFFF00';
+  fill.style.background = pct < 40 ? '#c62828' : pct < 70 ? '#0047AB' : '#0047AB';
 }
 function toggleChip(el,field,val){
   el.classList.toggle('sel');
@@ -892,7 +892,7 @@ function binomeSummaryHTML(u){
   if(pending){
     const otherEmail = pending.parrainEmail===u.email? pending.filleulEmail: pending.parrainEmail;
     const other = findUser(otherEmail);
-    return `<div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--leaf-soft);border-radius:12px;">
+    return `<div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--cobalt-soft);border-radius:12px;">
       <div class="avatar" style="width:52px;height:52px;font-size:16px;background:linear-gradient(135deg,#ffb74d,#ff9800);">${initials(other?.prenom+' '+other?.nom)}</div>
       <div>
         <b>${other ? esc(other.prenom)+' '+esc(other.nom) : 'Étudiant proposé'}</b><br>
