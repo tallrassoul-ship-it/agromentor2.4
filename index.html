@@ -22,14 +22,14 @@
 <!-- Loading Screen -->
 <div id="loading-screen">
   <div class="loader-content">
-    <div class="loader-logo">🌱</div>
+    <div class="loader-logo"></div>
     <div class="loader-bar"><div class="loader-fill"></div></div>
     <p>Chargement d'AgroMentor...</p>
   </div>
 </div>
 
 <!-- Back to Top -->
-<button id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Retour en haut">↑</button>
+<button id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Retour en haut"></button>
 
 <div id="toast-wrap"></div>
 
@@ -40,7 +40,7 @@
 
   <nav class="nav" id="mainNav">
     <div class="nav-inner">
-      <div class="logo"><div class="logo-mark">🌱</div>AgroMentor</div>
+      <div class="logo">AgroMentor</div>
       <div class="nav-links" id="navLinks">
         <a href="#hero" onclick="closeMobileNav()">Accueil</a>
         <a href="#about" onclick="closeMobileNav()">À propos</a>
@@ -48,19 +48,18 @@
         <a href="#sponsors" onclick="closeMobileNav()">Parrains</a>
         <a href="#sponsees" onclick="closeMobileNav()">Filleuls</a>
         <a href="#faq" onclick="closeMobileNav()">FAQ</a>
-        <a href="#contact" onclick="closeMobileNav()">Contact</a>
         <div class="nav-actions-mobile">
-          <button class="btn btn-ghost btn-sm" onclick="openAdminLogin();closeMobileNav()">🔐 Espace Admin</button>
+          <button class="btn btn-ghost btn-sm" onclick="openAdminLogin();closeMobileNav()"> Espace Admin</button>
           <button class="btn btn-ghost btn-sm" onclick="openAuth('login');closeMobileNav()">Se connecter</button>
           <button class="btn btn-primary btn-sm" onclick="openAuth('register');closeMobileNav()">S'inscrire</button>
         </div>
       </div>
       <div class="nav-actions nav-actions-desktop">
-        <button class="btn btn-ghost btn-sm" onclick="openAdminLogin()" title="Accès réservé à l'administrateur">🔐 Admin</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAdminLogin()" title="Accès réservé à l'administrateur"> Admin</button>
         <button class="btn btn-ghost btn-sm" onclick="openAuth('login')">Se connecter</button>
         <button class="btn btn-primary btn-sm" onclick="openAuth('register')">S'inscrire</button>
       </div>
-      <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Menu"></button>
     </div>
   </nav>
 
@@ -124,7 +123,7 @@
           <div class="step-item" data-i="3"><div class="step-ring">04</div><div><h4>Validation par l'administrateur</h4><p>Le binôme n'est activé qu'après acceptation, modification ou création manuelle par l'administrateur.</p></div></div>
         </div>
       </div>
-      <div class="warn-box reveal">⚠️ <div>Même proposé automatiquement, un binôme ne devient officiel qu'après validation de l'administrateur, qui peut aussi le refuser, le modifier ou en créer un manuellement.</div></div>
+      <div class="warn-box reveal"> <div>Même proposé automatiquement, un binôme ne devient officiel qu'après validation de l'administrateur, qui peut aussi le refuser, le modifier ou en créer un manuellement.</div></div>
     </div>
   </section>
 
@@ -161,31 +160,6 @@
     </div>
   </section>
 
-  <section id="contact" class="alt">
-    <div class="container contact-wrap">
-      <div class="contact-info reveal">
-        <span class="eyebrow">Contact</span>
-        <h2 style="color:var(--forest);margin:8px 0 20px;">Parlons-en</h2>
-        <div class="card"><h4>📍 Département STAAN</h4><p>Faculté des Sciences et Techniques, Sénégal</p></div>
-        <div class="card"><h4>💬 Nous écrire</h4><p>Utilisez le formulaire ci-contre : l'administration du département vous répondra dès que possible.</p></div>
-        <div class="card"><h4>🕐 Horaires</h4><p>Lundi — Vendredi : 8h00 — 17h00</p></div>
-      </div>
-      <div class="card reveal reveal-delay-1">
-        <form onsubmit="return submitContact(event)">
-          <div class="field"><label>Nom complet</label><input required id="cName"></div>
-          <div class="field"><label>Email</label><input type="email" required id="cEmail"></div>
-          <div class="field"><label>Sujet</label><select id="cSubject">
-            <option>Renseignement général</option>
-            <option>Problème technique</option>
-            <option>Partenariat</option>
-            <option>Autre</option>
-          </select></div>
-          <div class="field"><label>Message</label><textarea rows="5" required id="cMsg"></textarea></div>
-          <button class="btn btn-primary btn-block" type="submit">Envoyer le message</button>
-        </form>
-      </div>
-    </div>
-  </section>
 
   <div id="footer-public"></div>
 </div>
@@ -198,8 +172,8 @@
       <div class="topbar">
         <div style="font-weight:600;color:var(--forest);" id="topbarTitle">Tableau de bord</div>
         <div style="display:flex;gap:10px;align-items:center;">
-          <button class="btn btn-outline btn-sm" onclick="syncOnlineData()">🔄 Actualiser</button>
-          <button class="btn btn-ghost btn-sm" onclick="shareSite()">🔗 Partager</button>
+          <button class="btn btn-outline btn-sm" onclick="syncOnlineData()">Actualiser</button>
+          <button class="btn btn-ghost btn-sm" onclick="shareSite()">Partager</button>
           <button class="btn btn-outline btn-sm" onclick="logout()">Déconnexion</button>
         </div>
       </div>
@@ -223,7 +197,7 @@
     if (ls) {
       ls.innerHTML = `
         <div class="loader-content" role="alert">
-          <div class="loader-logo">⚠️</div>
+          <div class="loader-logo"></div>
           <p><b>Impossible de charger AgroMentor.</b></p>
           <p>Vérifiez votre connexion internet puis rechargez la page.</p>
           <button class="btn btn-primary" onclick="location.reload()">Réessayer</button>
@@ -273,7 +247,7 @@
         ls.classList.add('fade-out');
         setTimeout(() => ls.remove(), 600);
       }
-      console.log("🔥 AgroMentor Cloud connecté et initialisé !");
+      console.log("AgroMentor Cloud connecté et initialisé !");
     } catch (error) {
       showStartupError(error);
     }
@@ -281,5 +255,5 @@
 
   startApp();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a557cc1e5fc4de3e',t:'MTc5MzgzOTEyNA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a557cc1e5fc4de3e',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
